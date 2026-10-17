@@ -1,0 +1,34 @@
+# Python-generated files
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+
+# Virtual environments
+.venv
+
+# Audio & Data
+data/
+outputs/
+*.wav
+*.mp3
+*.flac
+*.ogg
+*.m4a
+
+# Model weights
+*.pt
+*.pth
+*.th
+*.ckpt
+*.onnx
+
+# Jupyter
+.ip.ipynb_checkpoints/
+
+# OS / editor files 
+.DS_Store 
+Thumbs.dbThumbs.db
+*:Zone.Identifier
