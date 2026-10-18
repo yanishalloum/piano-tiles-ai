@@ -7,7 +7,10 @@ authors = [
     { name = "yanishalloum", email = "yanishalloum@gmail.com" }
 ]
 requires-python = ">=3.11"
-dependencies = []
+dependencies = [
+    "librosa>=0.11.0",
+    "matplotlib>=3.11.2",
+]
 
 [project.scripts]
 piano-tiles-ai = "piano_tiles_ai:main"
@@ -15,4 +18,9 @@ piano-tiles-ai = "piano_tiles_ai:main"
 [build-system]
 requires = ["uv_build>=0.13.1,<0.14.0"]
 build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "jupyterlab>=4.6.4",
+]
 
