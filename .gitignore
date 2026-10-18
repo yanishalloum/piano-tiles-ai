@@ -30,5 +30,5 @@ outputs/
 
 # OS / editor files 
 .DS_Store 
-Thumbs.dbThumbs.db
+Thumbs.db
 *:Zone.Identifier
