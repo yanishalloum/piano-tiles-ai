@@ -1,5 +1,11 @@
 # Piano Tiles AI
 
+## Requirements
+
+- Python 3.11 (managed by uv)
+- FFmpeg (`sudo apt install ffmpeg` on Ubuntu)
+- An NVIDIA GPU with CUDA 12.6+ is strongly recommended
+
 > Extract the piano notes from any song and display it as interactive falling piano tiles, with left and right hands in different colors.
 
 ## How it works
