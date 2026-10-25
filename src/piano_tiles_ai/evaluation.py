@@ -4,6 +4,7 @@ from dataclasses import dataclass
 
 from piano_tiles_ai.notes import Note
 
+from piano_tiles_ai.hand_data import strip_hands
 
 @dataclass(frozen=True)
 class HandScores:
@@ -55,3 +56,17 @@ def score_hands(predicted: list[Note], reference: list[Note]) -> HandScores:
         right_precision=_safe_div(right_right, right_right + right_left),
         right_recall=_safe_div(right_right, right_right + left_right),
     )
+
+def evaluate_method(method, pieces: list[list[Note]]) -> HandScores:
+    """Score a hand assignment method on several pieces at once (micro-average).
+
+    Args:
+        method: A function that takes a list of notes without hands and
+            returns the same notes with hands assigned.
+        pieces: Reference pieces, each a list of hand-labeled notes.
+    """
+    predicted, reference = [], []
+    for piece in pieces:
+        predicted += method(strip_hands(piece))
+        reference += piece
+    return score_hands(predicted, reference)
