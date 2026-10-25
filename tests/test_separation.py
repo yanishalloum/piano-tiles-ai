@@ -59,14 +59,3 @@ def test_force_reruns_model(song, tmp_path, fake_roformer):
 def test_missing_file_raises(tmp_path):
     with pytest.raises(FileNotFoundError):
         separation.separate_piano(tmp_path / "missing.wav")
-
-
-def test_hash_depends_on_content_not_name(tmp_path):
-    a = tmp_path / "a.bin"
-    b = tmp_path / "b.bin"
-    c = tmp_path / "c.bin"
-    a.write_bytes(b"hello")
-    b.write_bytes(b"hello")
-    c.write_bytes(b"world")
-    assert separation.file_hash(a) == separation.file_hash(b)
-    assert separation.file_hash(a) != separation.file_hash(c)

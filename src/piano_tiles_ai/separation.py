@@ -1,6 +1,5 @@
 """Piano source separation with BS-RoFormer."""
 
-import hashlib
 import shutil
 import subprocess
 import sys
@@ -10,19 +9,10 @@ from pathlib import Path
 import soundfile as sf
 
 from piano_tiles_ai.audio import load_audio
+from piano_tiles_ai.cache import file_hash
 
 MODEL_NAME = "bs-roformer-sw"
 DEFAULT_CACHE_DIR = Path("outputs/separated")
-
-
-def file_hash(path: Path, chunk_size: int = 1024 * 1024) -> str:
-    """Return the SHA-256 hex digest of a file's content."""
-    digest = hashlib.sha256()
-    with open(path, "rb") as f:
-        while chunk := f.read(chunk_size):
-            digest.update(chunk)
-    return digest.hexdigest()
-
 
 def _run_roformer(input_dir: Path, output_dir: Path) -> None:
     """Run the bs-roformer-infer command on every WAV file in input_dir."""
