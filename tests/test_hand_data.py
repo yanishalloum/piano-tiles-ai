@@ -4,7 +4,7 @@ import pretty_midi
 import pytest
 
 from piano_tiles_ai.hand_data import load_hand_labeled_notes, strip_hands
-
+from piano_tiles_ai.hand_data import load_hand_labeled_notes, split_for, strip_hands
 
 def write_midi(path, tracks):
     """Write a MIDI file. `tracks` maps a track name to a list of (pitch, start, end)."""
@@ -49,3 +49,16 @@ def test_strip_hands_removes_labels(tmp_path):
         "Piano left": [(48, 0.0, 1.0)],
     })
     assert all(n.hand is None for n in strip_hands(load_hand_labeled_notes(path)))
+
+def test_split_is_deterministic():
+    assert split_for("chpn_op35_1.mid") == split_for("chpn_op35_1.mid")
+
+
+def test_split_ignores_the_folder():
+    assert split_for("a/b/piece.mid") == split_for("other/piece.mid")
+
+
+def test_split_proportions_are_roughly_respected():
+    splits = [split_for(f"piece_{i}.mid") for i in range(10_000)]
+    for name, expected in [("train", 0.70), ("val", 0.15), ("test", 0.15)]:
+        assert splits.count(name) / len(splits) == pytest.approx(expected, abs=0.02)
