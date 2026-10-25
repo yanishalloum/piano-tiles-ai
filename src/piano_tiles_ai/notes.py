@@ -5,6 +5,8 @@ from pathlib import Path
 
 import pretty_midi
 
+from typing import Literal
+Hand = Literal["left", "right"]
 
 @dataclass(frozen=True)
 class Note:
@@ -15,12 +17,14 @@ class Note:
         start: Onset time in seconds.
         end: Offset time in seconds.
         velocity: Key velocity, from 1 (softest) to 127 (loudest).
+        hand: "left" or "right" once the hands have been assigned, otherwise None
     """
 
     pitch: int
     start: float
     end: float
     velocity: int
+    hand: Hand | None = None
 
     @property
     def duration(self) -> float:

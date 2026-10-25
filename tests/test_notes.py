@@ -49,3 +49,6 @@ def test_notes_are_immutable():
 def test_missing_file_raises(tmp_path):
     with pytest.raises(FileNotFoundError):
         load_notes(tmp_path / "missing.mid")
+
+def test_hand_is_unset_by_default():
+    assert Note(pitch=60, start=0.0, end=1.0, velocity=80).hand is None
