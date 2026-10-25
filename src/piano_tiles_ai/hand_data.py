@@ -87,3 +87,19 @@ def split_for(path: str | Path, val_fraction: float = 0.15, test_fraction: float
     if position < test_fraction + val_fraction:
         return "val"
     return "train"
+
+def load_split(data_dir: str | Path, split: Split) -> list[list[Note]]:
+    """Load every usable hand-labeled piece of one split.
+
+    Files that cannot be used (for example, voices stored on separate tracks)
+    are skipped.
+    """
+    pieces = []
+    for path in sorted(Path(data_dir).glob("*.mid")):
+        if split_for(path) != split:
+            continue
+        try:
+            pieces.append(load_hand_labeled_notes(path))
+        except ValueError:
+            continue
+    return pieces
