@@ -3,8 +3,10 @@
 import torch
 
 from piano_tiles_ai.hand_model import (
+    CHUNK_SIZE,
     HandChunks,
     HandLSTM,
+    HandTransformer,
     assign_hands_with_model,
     train_hand_model,
 )
@@ -52,4 +54,23 @@ def test_assign_hands_with_model_handles_empty_input():
 def test_training_learns_a_trivial_task():
     pieces = [make_piece(512) for _ in range(4)]
     model, history = train_hand_model(pieces, pieces[:1], epochs=40, learning_rate=1e-2, device="cpu")
+    assert max(h["val_accuracy"] for h in history) > 0.95
+
+def test_transformer_output_shape():
+    model = HandTransformer(d_model=16, nhead=2, num_layers=1, dim_feedforward=32)
+    assert model(torch.zeros(2, CHUNK_SIZE, 4)).shape == (2, CHUNK_SIZE)
+
+
+def test_transformer_labels_pieces_longer_than_a_chunk():
+    model = HandTransformer(d_model=16, nhead=2, num_layers=1, dim_feedforward=32)
+    notes = make_piece(3 * CHUNK_SIZE + 17)
+    result = assign_hands_with_model(notes, model)
+    assert len(result) == len(notes)
+    assert all(n.hand in ("left", "right") for n in result)
+
+
+def test_transformer_learns_a_trivial_task():
+    pieces = [make_piece(512) for _ in range(4)]
+    model = HandTransformer(d_model=16, nhead=2, num_layers=1, dim_feedforward=32)
+    _, history = train_hand_model(pieces, pieces[:1], model=model, epochs=40, learning_rate=1e-2, device="cpu")
     assert max(h["val_accuracy"] for h in history) > 0.95
