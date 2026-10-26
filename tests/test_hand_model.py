@@ -8,6 +8,7 @@ from piano_tiles_ai.hand_model import (
     HandLSTM,
     HandTransformer,
     assign_hands_with_model,
+    load_hand_model,
     train_hand_model,
 )
 from piano_tiles_ai.notes import Note
@@ -74,3 +75,11 @@ def test_transformer_learns_a_trivial_task():
     model = HandTransformer(d_model=16, nhead=2, num_layers=1, dim_feedforward=32)
     _, history = train_hand_model(pieces, pieces[:1], model=model, epochs=40, learning_rate=1e-2, device="cpu")
     assert max(h["val_accuracy"] for h in history) > 0.95
+
+def test_saved_model_can_be_loaded(tmp_path):
+    model = HandLSTM().eval()
+    path = tmp_path / "model.pt"
+    torch.save(model.state_dict(), path)
+    loaded = load_hand_model(path, device="cpu")
+    x = torch.zeros(1, 5, 4)
+    assert torch.allclose(model(x), loaded(x))

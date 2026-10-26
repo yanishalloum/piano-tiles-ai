@@ -11,6 +11,8 @@ from piano_tiles_ai.evaluation import evaluate_method
 from piano_tiles_ai.hand_features import N_FEATURES, hand_labels, note_features
 from piano_tiles_ai.notes import Note
 
+from pathlib import Path
+
 CHUNK_SIZE = 128
 
 
@@ -197,3 +199,11 @@ def train_hand_model(
 
     model.load_state_dict(best_state)
     return model, history
+
+def load_hand_model(path: str | Path, device: str | None = None) -> HandLSTM:
+    """Load a trained HandLSTM from a state dict file, ready for inference."""
+    if device is None:
+        device = "cuda" if torch.cuda.is_available() else "cpu"
+    model = HandLSTM()
+    model.load_state_dict(torch.load(path, map_location=device))
+    return model.to(device).eval()

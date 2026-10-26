@@ -56,3 +56,34 @@ def load_notes(path: str | Path) -> list[Note]:
         for n in instrument.notes
     ]
     return sorted(notes, key=lambda note: (note.start, note.pitch))
+
+TRACK_NAMES = {"right": "Piano right", "left": "Piano left", None: "Piano"}
+
+
+def save_notes_as_midi(notes: list[Note], path: str | Path) -> Path:
+    """Write notes to a MIDI file, with one track per hand.
+
+    Right-hand and left-hand notes go to tracks named "Piano right" and
+    "Piano left", the same convention as piano-midi.de. Notes without a hand
+    go to a track named "Piano".
+
+    Returns:
+        The path of the written file.
+    """
+    tracks = {}
+    for note in notes:
+        if note.hand not in tracks:
+            tracks[note.hand] = pretty_midi.Instrument(program=0, name=TRACK_NAMES[note.hand])
+        tracks[note.hand].notes.append(
+            pretty_midi.Note(velocity=note.velocity, pitch=note.pitch, start=note.start, end=note.end)
+        )
+
+    midi = pretty_midi.PrettyMIDI()
+    for hand in ("right", "left", None):
+        if hand in tracks:
+            midi.instruments.append(tracks[hand])
+
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    midi.write(str(path))
+    return path

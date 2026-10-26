@@ -5,6 +5,8 @@ import pytest
 
 from piano_tiles_ai.notes import Note, load_notes
 
+from piano_tiles_ai.hand_data import load_hand_labeled_notes
+from piano_tiles_ai.notes import Note, load_notes, save_notes_as_midi
 
 @pytest.fixture
 def midi_file(tmp_path):
@@ -52,3 +54,17 @@ def test_missing_file_raises(tmp_path):
 
 def test_hand_is_unset_by_default():
     assert Note(pitch=60, start=0.0, end=1.0, velocity=80).hand is None
+
+def test_saved_hands_can_be_read_back(tmp_path):
+    notes = [
+        Note(pitch=48, start=0.0, end=1.0, velocity=70, hand="left"),
+        Note(pitch=72, start=0.5, end=1.0, velocity=90, hand="right"),
+    ]
+    path = save_notes_as_midi(notes, tmp_path / "hands.mid")
+    loaded = load_hand_labeled_notes(path)
+    assert [(n.pitch, n.hand, n.velocity) for n in loaded] == [(48, "left", 70), (72, "right", 90)]
+
+def test_notes_without_hands_are_saved_in_one_track(tmp_path):
+    notes = [Note(pitch=60, start=0.0, end=1.0, velocity=80)]
+    path = save_notes_as_midi(notes, tmp_path / "plain.mid")
+    assert [n.pitch for n in load_notes(path)] == [60]
