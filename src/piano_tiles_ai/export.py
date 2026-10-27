@@ -9,15 +9,28 @@ from piano_tiles_ai.notes import Note
 FORMAT_VERSION = 1
 
 
+TIME_DECIMALS = 3  # millisecond precision
+
+
 def song_to_dict(notes: list[Note], title: str) -> dict:
-    """Build the JSON-ready description of a song."""
+    """Build the JSON-ready description of a song.
+
+    Times are rounded to the millisecond: finer precision is meaningless for
+    display and only makes the file larger.
+    """
     return {
         "format_version": FORMAT_VERSION,
         "title": title,
-        "duration": max((n.end for n in notes), default=0.0),
-        "notes": [asdict(n) for n in notes],
+        "duration": round(max((n.end for n in notes), default=0.0), TIME_DECIMALS),
+        "notes": [
+            {
+                **asdict(n),
+                "start": round(n.start, TIME_DECIMALS),
+                "end": round(n.end, TIME_DECIMALS),
+            }
+            for n in notes
+        ],
     }
-
 
 def save_song_json(notes: list[Note], path: str | Path, title: str) -> Path:
     """Write a song to a JSON file for the web visualizer.

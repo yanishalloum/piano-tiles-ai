@@ -31,3 +31,9 @@ def test_saved_file_is_valid_json(tmp_path):
         song = json.load(f)
     assert song["title"] == "Gymnopédie"
     assert len(song["notes"]) == 2
+
+def test_times_are_rounded_to_the_millisecond():
+    notes = [Note(pitch=60, start=0.011979166666666666, end=0.0817708333, velocity=64, hand="left")]
+    note = song_to_dict(notes, "Test")["notes"][0]
+    assert note["start"] == 0.012
+    assert note["end"] == 0.082
