@@ -11,8 +11,10 @@ import soundfile as sf
 from piano_tiles_ai.audio import load_audio
 from piano_tiles_ai.cache import file_hash
 
+from piano_tiles_ai.paths import OUTPUTS_DIR
+
 MODEL_NAME = "bs-roformer-sw"
-DEFAULT_CACHE_DIR = Path("outputs/separated")
+DEFAULT_CACHE_DIR = OUTPUTS_DIR / "separated"
 
 def _run_roformer(input_dir: Path, output_dir: Path) -> None:
     """Run the bs-roformer-infer command on every WAV file in input_dir."""
