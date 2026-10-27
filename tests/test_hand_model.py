@@ -83,3 +83,10 @@ def test_saved_model_can_be_loaded(tmp_path):
     loaded = load_hand_model(path, device="cpu")
     x = torch.zeros(1, 5, 4)
     assert torch.allclose(model(x), loaded(x))
+
+def test_training_with_augmentation_runs():
+    pieces = [make_piece(512) for _ in range(2)]
+    model, history = train_hand_model(
+        pieces, pieces[:1], epochs=2, learning_rate=1e-2, device="cpu", augment_copies=1
+    )
+    assert len(history) == 2

@@ -13,6 +13,22 @@ from piano_tiles_ai.notes import Note
 
 from pathlib import Path
 
+"""Neural networks that assign each note to the left or right hand."""
+
+import random
+from dataclasses import replace
+from pathlib import Path
+
+import numpy as np
+import torch
+from torch import nn
+from torch.utils.data import DataLoader, Dataset
+
+from piano_tiles_ai.evaluation import evaluate_method
+from piano_tiles_ai.hand_augmentation import augment_piece
+from piano_tiles_ai.hand_features import N_FEATURES, hand_labels, note_features
+from piano_tiles_ai.notes import Note
+
 CHUNK_SIZE = 128
 
 
@@ -150,6 +166,7 @@ def train_hand_model(
     learning_rate: float = 1e-3,
     device: str | None = None,
     seed: int = 0,
+    augment_copies: int = 0,
 ) -> tuple[nn.Module, list[dict]]:
     """Train a hand assignment model and keep the version with the best validation accuracy.
 
@@ -157,6 +174,9 @@ def train_hand_model(
         train_pieces: Hand-labeled pieces used to update the weights.
         val_pieces: Hand-labeled pieces used to pick the best epoch.
         model: The model to train. Defaults to a new HandLSTM.
+        augment_copies: Number of augmented copies of each training piece
+            added to the training set (0 = no augmentation). Validation
+            pieces are never augmented.
 
     Returns:
         The trained model and the training history (one dict per epoch).
@@ -166,6 +186,15 @@ def train_hand_model(
         device = "cuda" if torch.cuda.is_available() else "cpu"
     if model is None:
         model = HandLSTM()
+
+    if augment_copies:
+        rng = random.Random(seed)
+        augmented = [
+            augment_piece(piece, rng)
+            for piece in train_pieces
+            for _ in range(augment_copies)
+        ]
+        train_pieces = train_pieces + augmented
 
     model = model.to(device)
     loader = DataLoader(HandChunks(train_pieces), batch_size=batch_size, shuffle=True)
