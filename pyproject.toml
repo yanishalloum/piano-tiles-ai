@@ -36,6 +36,7 @@ dev = [
     "jupyterlab>=4.6.4",
     "nbstripout>=0.9.1",
     "pytest>=9.1.1",
+    "rangehttpserver>=1.4.0",
 ]
 
 [[tool.uv.index]]
