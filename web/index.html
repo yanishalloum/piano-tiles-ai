@@ -19,10 +19,33 @@
         <span class="swatch swatch-right"></span>Main droite
       </p>
     </header>
+
     <canvas id="stage" aria-label="Les notes du morceau tombent vers le clavier"></canvas>
-    <p id="status" class="hint">Espace ou clic pour lancer la lecture</p>
+
+    <section class="transport" aria-label="Commandes de lecture">
+      <button id="play" class="play" type="button">Lecture</button>
+      <button id="back" type="button" aria-label="Reculer de 5 secondes">−5 s</button>
+
+      <div class="timeline">
+        <input id="seek" type="range" min="0" max="0" step="0.01" value="0" aria-label="Position dans le morceau">
+        <span id="clock" class="clock">0:00 / 0:00</span>
+      </div>
+
+      <div class="source" role="group" aria-label="Ce qu'on entend">
+        <button type="button" data-source="mix" aria-pressed="true">Morceau complet</button>
+        <button type="button" data-source="piano" aria-pressed="false">Piano seul</button>
+      </div>
+
+      <label class="speed">
+        Vitesse
+        <input id="speed" type="range" min="0.5" max="1.5" step="0.05" value="1">
+        <output id="speed-value" for="speed">×1</output>
+      </label>
+    </section>
   </main>
-  <audio id="player" preload="auto"></audio>
+
+  <audio id="audio-mix" preload="auto"></audio>
+  <audio id="audio-piano" preload="auto"></audio>
   <script src="app.js"></script>
 </body>
 </html>

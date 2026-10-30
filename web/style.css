@@ -1,9 +1,11 @@
 :root {
     --midnight: #121a2e;
+    --midnight-raised: #1a2440;
     --ivory: #ede3cd;
     --muted: #8f96a8;
     --brass: #c9a04e;
     --smoke-blue: #5b86c5;
+    --line: rgba(237, 227, 205, 0.18);
   }
   
   * {
@@ -22,17 +24,20 @@
     font-family: "Newsreader", Georgia, serif;
     font-size: 18px;
     line-height: 1.5;
+    accent-color: var(--brass);
   }
   
   .room {
     display: grid;
     grid-template-rows: auto minmax(0, 1fr) auto;
-    gap: 12px;
+    gap: 14px;
     height: 100vh;
     max-width: 1400px;
     margin: 0 auto;
-    padding: 20px 24px 16px;
+    padding: 20px 24px 18px;
   }
+  
+  /* --- Header ------------------------------------------------------------- */
   
   .liner {
     display: flex;
@@ -77,6 +82,8 @@
     background: var(--brass);
   }
   
+  /* --- Stage -------------------------------------------------------------- */
+  
   #stage {
     display: block;
     width: 100%;
@@ -85,8 +92,96 @@
     cursor: pointer;
   }
   
-  .hint {
-    margin: 0;
+  /* --- Transport ---------------------------------------------------------- */
+  
+  .transport {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 12px 18px;
+    font-size: 16px;
+  }
+  
+  button {
+    font: inherit;
+    color: var(--ivory);
+    background: transparent;
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    padding: 6px 14px;
+    cursor: pointer;
+  }
+  
+  button:hover {
+    border-color: var(--ivory);
+  }
+  
+  button:focus-visible,
+  input:focus-visible {
+    outline: 2px solid var(--brass);
+    outline-offset: 2px;
+  }
+  
+  .play {
+    min-width: 96px;
+    background: var(--brass);
+    border-color: var(--brass);
+    color: var(--midnight);
+  }
+  
+  .play:hover {
+    border-color: var(--ivory);
+  }
+  
+  .timeline {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex: 1 1 260px;
+  }
+  
+  .timeline input {
+    flex: 1;
+  }
+  
+  .clock {
     color: var(--muted);
-    font-size: 15px;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+  }
+  
+  .source {
+    display: flex;
+  }
+  
+  .source button {
+    border-radius: 0;
+  }
+  
+  .source button:first-child {
+    border-radius: 4px 0 0 4px;
+  }
+  
+  .source button:last-child {
+    border-radius: 0 4px 4px 0;
+    border-left: none;
+  }
+  
+  .source button[aria-pressed="true"] {
+    background: var(--midnight-raised);
+    border-color: var(--brass);
+    color: var(--brass);
+  }
+  
+  .speed {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    color: var(--muted);
+  }
+  
+  .speed output {
+    min-width: 3.5ch;
+    color: var(--ivory);
+    font-variant-numeric: tabular-nums;
   }

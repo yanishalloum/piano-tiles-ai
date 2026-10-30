@@ -5,7 +5,10 @@
 // ---------------------------------------------------------------------------
 
 const SONG_URL = "songs/letitbe.json";
-const AUDIO_URL = "songs/letitbe.mp3";
+const AUDIO_URLS = {
+  mix: "songs/letitbe_mix.mp3",
+  piano: "songs/letitbe_piano.mp3",
+};
 
 const LOWEST_KEY = 21;   // A0
 const HIGHEST_KEY = 108; // C8
@@ -14,6 +17,7 @@ const BLACK_KEY_CLASSES = new Set([1, 3, 6, 8, 10]); // C#, D#, F#, G#, A#
 const KEYBOARD_HEIGHT = 120; // px
 const FELT_HEIGHT = 6;       // px
 const SECONDS_VISIBLE = 3;   // seconds of music shown above the keyboard
+const SKIP_SECONDS = 5;      // jump size for the back button and arrow keys
 
 const COLORS = {
   stageTop: "#1c2642",
@@ -75,10 +79,26 @@ function handColor(hand) {
 
 const canvas = document.getElementById("stage");
 const ctx = canvas.getContext("2d");
-const audio = document.getElementById("player");
+
+const players = {
+  mix: document.getElementById("audio-mix"),
+  piano: document.getElementById("audio-piano"),
+};
+
+const controls = {
+  play: document.getElementById("play"),
+  back: document.getElementById("back"),
+  seek: document.getElementById("seek"),
+  clock: document.getElementById("clock"),
+  speed: document.getElementById("speed"),
+  speedValue: document.getElementById("speed-value"),
+  sourceButtons: document.querySelectorAll(".source button"),
+};
 
 const state = {
   song: null,
+  audio: players.mix, // the active player, which is also the clock
+  seeking: false,
   width: 0,
   height: 0,
   layout: new Map(),
@@ -105,7 +125,6 @@ function drawStage(hitLine) {
   ctx.fillStyle = gradient;
   ctx.fillRect(0, 0, state.width, hitLine);
 
-  // A faint line above every C helps reading the octaves.
   ctx.strokeStyle = COLORS.octaveGuide;
   ctx.lineWidth = 1;
   for (const [pitch, key] of state.layout) {
@@ -166,7 +185,7 @@ function drawKeyboard(top, height, activeKeys) {
 }
 
 function drawFrame() {
-  const time = audio.currentTime;
+  const time = state.audio.currentTime;
   const keyboardTop = state.height - KEYBOARD_HEIGHT;
   const hitLine = keyboardTop - FELT_HEIGHT;
   const pixelsPerSecond = hitLine / SECONDS_VISIBLE;
@@ -187,6 +206,7 @@ function drawFrame() {
   ctx.fillRect(0, hitLine, state.width, FELT_HEIGHT);
   drawKeyboard(keyboardTop, KEYBOARD_HEIGHT, activeKeys);
 
+  updateTimeline(time);
   requestAnimationFrame(drawFrame);
 }
 
@@ -194,24 +214,106 @@ function drawFrame() {
 // Playback
 // ---------------------------------------------------------------------------
 
+function formatTime(seconds) {
+  const minutes = Math.floor(seconds / 60);
+  const rest = Math.floor(seconds % 60).toString().padStart(2, "0");
+  return `${minutes}:${rest}`;
+}
+
+function songDuration() {
+  return Number.isFinite(state.audio.duration) ? state.audio.duration : state.song?.duration ?? 0;
+}
+
 function togglePlayback() {
-  if (audio.paused) {
-    audio.play().catch((error) => console.error(error));
+  if (state.audio.paused) {
+    state.audio.play().catch((error) => console.error(error));
   } else {
-    audio.pause();
+    state.audio.pause();
   }
 }
 
-function updateStatus() {
-  document.getElementById("status").textContent = audio.paused
-    ? "Espace ou clic pour lancer la lecture"
-    : "Espace ou clic pour mettre en pause";
+function seekTo(seconds) {
+  state.audio.currentTime = Math.min(Math.max(seconds, 0), songDuration());
 }
 
-function formatDuration(seconds) {
-  const minutes = Math.floor(seconds / 60);
-  const rest = Math.floor(seconds % 60).toString().padStart(2, "0");
-  return `${minutes} min ${rest}`;
+function skip(seconds) {
+  seekTo(state.audio.currentTime + seconds);
+}
+
+function setSpeed(rate) {
+  for (const player of Object.values(players)) {
+    player.preservesPitch = true;
+    player.playbackRate = rate;
+  }
+  controls.speedValue.textContent = `×${rate.toLocaleString("fr-FR")}`;
+}
+
+/** Switch between the full mix and the isolated piano, keeping the position. */
+function setSource(name) {
+  const next = players[name];
+  if (next === state.audio) return;
+
+  const wasPlaying = !state.audio.paused;
+  const position = state.audio.currentTime;
+  state.audio.pause();
+
+  next.currentTime = position;
+  state.audio = next;
+  if (wasPlaying) togglePlayback();
+
+  for (const button of controls.sourceButtons) {
+    button.setAttribute("aria-pressed", String(button.dataset.source === name));
+  }
+}
+
+function updatePlayButton() {
+  controls.play.textContent = state.audio.paused ? "Lecture" : "Pause";
+}
+
+function updateTimeline(time) {
+  const duration = songDuration();
+  controls.seek.max = duration;
+  if (!state.seeking) controls.seek.value = time;
+  controls.clock.textContent = `${formatTime(time)} / ${formatTime(duration)}`;
+}
+
+// ---------------------------------------------------------------------------
+// Controls
+// ---------------------------------------------------------------------------
+
+function connectControls() {
+  canvas.addEventListener("click", togglePlayback);
+  controls.play.addEventListener("click", togglePlayback);
+  controls.back.addEventListener("click", () => skip(-SKIP_SECONDS));
+
+  controls.seek.addEventListener("pointerdown", () => { state.seeking = true; });
+  controls.seek.addEventListener("pointerup", () => { state.seeking = false; });
+  controls.seek.addEventListener("input", () => seekTo(Number(controls.seek.value)));
+
+  controls.speed.addEventListener("input", () => setSpeed(Number(controls.speed.value)));
+
+  for (const button of controls.sourceButtons) {
+    button.addEventListener("click", () => setSource(button.dataset.source));
+  }
+
+  for (const player of Object.values(players)) {
+    player.addEventListener("play", updatePlayButton);
+    player.addEventListener("pause", updatePlayButton);
+  }
+
+  window.addEventListener("keydown", (event) => {
+    // Buttons and sliders already react to the keyboard on their own.
+    if (event.target.closest("button, input")) return;
+
+    if (event.code === "Space") {
+      event.preventDefault();
+      togglePlayback();
+    } else if (event.code === "ArrowLeft") {
+      skip(-SKIP_SECONDS);
+    } else if (event.code === "ArrowRight") {
+      skip(SKIP_SECONDS);
+    }
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -229,24 +331,17 @@ async function loadSong(url) {
 async function main() {
   resizeCanvas();
   window.addEventListener("resize", resizeCanvas);
+  connectControls();
+  setSpeed(1);
   requestAnimationFrame(drawFrame);
-
-  canvas.addEventListener("click", togglePlayback);
-  window.addEventListener("keydown", (event) => {
-    if (event.code === "Space") {
-      event.preventDefault();
-      togglePlayback();
-    }
-  });
-  audio.addEventListener("play", updateStatus);
-  audio.addEventListener("pause", updateStatus);
 
   try {
     state.song = await loadSong(SONG_URL);
-    audio.src = AUDIO_URL;
+    players.mix.src = AUDIO_URLS.mix;
+    players.piano.src = AUDIO_URLS.piano;
     document.getElementById("title").textContent = state.song.title;
     document.getElementById("details").textContent =
-      `${state.song.notes.length} notes, ${formatDuration(state.song.duration)}`;
+      `${state.song.notes.length} notes, ${formatTime(state.song.duration)}`;
   } catch (error) {
     document.getElementById("details").textContent = error.message;
     console.error(error);
