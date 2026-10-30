@@ -4,45 +4,67 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Piano Tiles AI</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' rx='3' fill='%23121a2e'/%3E%3Crect x='3' y='3' width='3' height='10' rx='1' fill='%235f8fd6'/%3E%3Crect x='10' y='3' width='3' height='7' rx='1' fill='%23d0a24f'/%3E%3C/svg%3E">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=League+Gothic&family=Newsreader:ital@0;1&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=League+Gothic&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;1,6..72,400&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
   <main class="room">
-    <header class="liner">
-      <h1 id="title">Piano Tiles AI</h1>
-      <p id="details">Chargement du morceau…</p>
+    <header class="masthead">
+      <div class="titles">
+        <h1 id="title">Piano Tiles AI</h1>
+        <p id="details">Chargement du morceau…</p>
+      </div>
       <p class="legend">
-        <span class="swatch swatch-left"></span>Main gauche
-        <span class="swatch swatch-right"></span>Main droite
+        <span class="swatch swatch-left" aria-hidden="true"></span>Main gauche
+        <span class="swatch swatch-right" aria-hidden="true"></span>Main droite
       </p>
     </header>
 
     <canvas id="stage" aria-label="Les notes du morceau tombent vers le clavier"></canvas>
 
     <section class="transport" aria-label="Commandes de lecture">
-      <button id="play" class="play" type="button">Lecture</button>
-      <button id="back" type="button" aria-label="Reculer de 5 secondes">−5 s</button>
-      <button id="forward" type="button" aria-label="Avancer de 5 secondes">+5 s</button>
+      <div class="buttons">
+        <button id="back" class="round" type="button" aria-label="Reculer de 5 secondes">
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M12 6A7 7 0 1 1 5 13" />
+            <path d="M14.5 3.5L12 6l2.5 2.5" />
+            <text x="12" y="16.2">5</text>
+          </svg>
+        </button>
+        <button id="play" class="round play" type="button" aria-label="Lecture" data-playing="false">
+          <svg class="icon-play" viewBox="0 0 24 24" aria-hidden="true"><path d="M8.5 5.5l10 6.5-10 6.5z" /></svg>
+          <svg class="icon-pause" viewBox="0 0 24 24" aria-hidden="true"><rect x="7" y="5.5" width="3.5" height="13" rx="1" /><rect x="13.5" y="5.5" width="3.5" height="13" rx="1" /></svg>
+        </button>
+        <button id="forward" class="round" type="button" aria-label="Avancer de 5 secondes">
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M12 6A7 7 0 1 0 19 13" />
+            <path d="M9.5 3.5L12 6 9.5 8.5" />
+            <text x="12" y="16.2">5</text>
+          </svg>
+        </button>
+      </div>
 
       <div class="timeline">
+        <span id="clock-now" class="clock">0:00</span>
         <input id="seek" type="range" min="0" max="0" step="0.01" value="0" aria-label="Position dans le morceau">
-        <span id="clock" class="clock">0:00 / 0:00</span>
+        <span id="clock-total" class="clock">0:00</span>
       </div>
 
       <div class="source" role="group" aria-label="Ce qu'on entend">
-        <button type="button" data-source="mix" aria-pressed="true">Morceau complet</button>
+        <button type="button" data-source="mix" aria-pressed="true">Morceau</button>
         <button type="button" data-source="piano" aria-pressed="false">Piano seul</button>
       </div>
 
-      <label class="speed">
+      <label class="setting">
         Vitesse
         <input id="speed" type="range" min="0.5" max="1.5" step="0.05" value="1">
         <output id="speed-value" for="speed">×1</output>
       </label>
-      <label class="names">
+
+      <label class="setting">
         Notes
         <select id="names">
           <option value="none">Masquées</option>
