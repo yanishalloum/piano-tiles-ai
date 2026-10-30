@@ -32,3 +32,9 @@ outputs/
 .DS_Store 
 Thumbs.db
 *:Zone.Identifier
+
+# Songs exported for the visualizer (may contain copyrighted music)
+web/songs/
+
+# Song library of the web app (copyrighted audio)
+library/
