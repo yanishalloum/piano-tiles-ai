@@ -8,7 +8,6 @@ from piano_tiles_ai.notes import Note
 
 FORMAT_VERSION = 1
 
-
 TIME_DECIMALS = 3  # millisecond precision
 
 
