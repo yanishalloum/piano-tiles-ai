@@ -25,6 +25,7 @@
     <section class="transport" aria-label="Commandes de lecture">
       <button id="play" class="play" type="button">Lecture</button>
       <button id="back" type="button" aria-label="Reculer de 5 secondes">−5 s</button>
+      <button id="forward" type="button" aria-label="Avancer de 5 secondes">+5 s</button>
 
       <div class="timeline">
         <input id="seek" type="range" min="0" max="0" step="0.01" value="0" aria-label="Position dans le morceau">
@@ -40,6 +41,14 @@
         Vitesse
         <input id="speed" type="range" min="0.5" max="1.5" step="0.05" value="1">
         <output id="speed-value" for="speed">×1</output>
+      </label>
+      <label class="names">
+        Notes
+        <select id="names">
+          <option value="none">Masquées</option>
+          <option value="english">C D E</option>
+          <option value="solfege">Do Ré Mi</option>
+        </select>
       </label>
     </section>
   </main>

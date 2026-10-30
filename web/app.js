@@ -32,6 +32,8 @@ const COLORS = {
   left: "#5b86c5",
   right: "#c9a04e",
   unknown: "#9aa0ae",
+  tileLabel: "rgba(18, 26, 46, 0.85)",
+  keyLabel: "#7d7259",
 };
 
 // ---------------------------------------------------------------------------
@@ -74,6 +76,41 @@ function handColor(hand) {
 }
 
 // ---------------------------------------------------------------------------
+// Note names
+// ---------------------------------------------------------------------------
+
+const NOTE_NAMES = {
+    english: ["C", "C♯", "D", "D♯", "E", "F", "F♯", "G", "G♯", "A", "A♯", "B"],
+    solfege: ["Do", "Do♯", "Ré", "Ré♯", "Mi", "Fa", "Fa♯", "Sol", "Sol♯", "La", "La♯", "Si"],
+  };
+  
+  /**
+   * Name of a MIDI pitch. Octaves follow each convention:
+   * middle C (60) is C4 in English and Do3 in French solfège.
+   */
+  function noteLabel(pitch, convention, withOctave) {
+    const name = NOTE_NAMES[convention][pitch % 12];
+    if (!withOctave) return name;
+    const octave = Math.floor(pitch / 12) - (convention === "solfege" ? 2 : 1);
+    return `${name}${octave}`;
+  }
+  
+  function loadConvention() {
+    try {
+      return localStorage.getItem("noteNames") ?? "solfege";
+    } catch {
+      return "solfege";
+    }
+  }
+  
+  function saveConvention(convention) {
+    try {
+      localStorage.setItem("noteNames", convention);
+    } catch {
+      // Storage may be unavailable (private browsing): the choice is simply not remembered.
+    }
+  }
+// ---------------------------------------------------------------------------
 // State
 // ---------------------------------------------------------------------------
 
@@ -93,6 +130,9 @@ const controls = {
   speed: document.getElementById("speed"),
   speedValue: document.getElementById("speed-value"),
   sourceButtons: document.querySelectorAll(".source button"),
+  back: document.getElementById("back"),
+  forward: document.getElementById("forward"),
+  names: document.getElementById("names"),
 };
 
 const state = {
@@ -102,6 +142,8 @@ const state = {
   width: 0,
   height: 0,
   layout: new Map(),
+  seeking: false,
+  convention: loadConvention(),
 };
 
 function resizeCanvas() {
@@ -153,6 +195,16 @@ function drawTile(note, time, hitLine, pixelsPerSecond) {
   ctx.roundRect(key.x + inset, y, key.width - 2 * inset, height, 4);
   ctx.fill();
   ctx.globalAlpha = 1;
+
+  if (state.convention === "none" || height < 18) return;
+  const label = noteLabel(note.pitch, state.convention, false);
+  const size = Math.min(15, key.width * 0.6);
+  ctx.font = `${size}px "League Gothic", "Arial Narrow", sans-serif`;
+  if (ctx.measureText(label).width > key.width - 2 * inset - 2) return;
+  ctx.fillStyle = COLORS.tileLabel;
+  ctx.textAlign = "center";
+  ctx.textBaseline = "bottom";
+  ctx.fillText(label, key.x + key.width / 2, y + height - 3);
 }
 
 function drawKeyboard(top, height, activeKeys) {
@@ -167,6 +219,15 @@ function drawKeyboard(top, height, activeKeys) {
     ctx.fillRect(key.x, top, key.width, height);
     ctx.fillStyle = COLORS.keyGap;
     ctx.fillRect(key.x, top, 1, height);
+    if (state.convention === "none") return;
+    ctx.font = `13px "Newsreader", Georgia, serif`;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "bottom";
+    ctx.fillStyle = COLORS.keyLabel;
+    for (const [pitch, key] of state.layout) {
+      if (pitch % 12 !== 0) continue;
+      ctx.fillText(noteLabel(pitch, state.convention, true), key.x + key.width / 2, top + height - 6);
+    }
   }
 
   const blackHeight = height * 0.62;
@@ -285,7 +346,13 @@ function connectControls() {
   canvas.addEventListener("click", togglePlayback);
   controls.play.addEventListener("click", togglePlayback);
   controls.back.addEventListener("click", () => skip(-SKIP_SECONDS));
+  controls.forward.addEventListener("click", () => skip(SKIP_SECONDS));
 
+  controls.names.value = state.convention;
+  controls.names.addEventListener("change", () => {
+    state.convention = controls.names.value;
+    saveConvention(state.convention);
+  });
   controls.seek.addEventListener("pointerdown", () => { state.seeking = true; });
   controls.seek.addEventListener("pointerup", () => { state.seeking = false; });
   controls.seek.addEventListener("input", () => seekTo(Number(controls.seek.value)));

@@ -173,11 +173,26 @@
     color: var(--brass);
   }
   
-  .speed {
+  .speed,
+  .names {
     display: flex;
     align-items: center;
     gap: 10px;
     color: var(--muted);
+  }
+  
+  select {
+    font: inherit;
+    color: var(--ivory);
+    background: var(--midnight);
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    padding: 4px 8px;
+  }
+  
+  select:focus-visible {
+    outline: 2px solid var(--brass);
+    outline-offset: 2px;
   }
   
   .speed output {
