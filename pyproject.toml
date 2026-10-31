@@ -10,11 +10,13 @@ requires-python = ">=3.11"
 dependencies = [
     "bs-roformer-infer>=0.1.5",
     "demucs>=4.0.1",
+    "fastapi>=0.162.0",
     "librosa>=0.11.0",
     "matplotlib>=3.11.2",
     # transkun 2.0.1 imports pkg_resources, removed from recent setuptools
     "numpy>=2.4.6",
     "pretty-midi>=0.2.11.post0",
+    "python-multipart>=0.0.32",
     "setuptools<81",
     "soundfile>=0.14.0",
     "torch>=2.14.1",
@@ -22,10 +24,11 @@ dependencies = [
     # Must come from the same CUDA index as torch (see [tool.uv.sources]).
     "torchaudio==2.11.0",
     "transkun>=2.0.1",
+    "uvicorn>=0.54.0",
 ]
 
 [project.scripts]
-piano-tiles-ai = "piano_tiles_ai:main"
+piano-tiles-ai = "piano_tiles_ai.cli:main"
 
 [build-system]
 requires = ["uv_build>=0.13.1,<0.14.0"]
@@ -33,6 +36,7 @@ build-backend = "uv_build"
 
 [dependency-groups]
 dev = [
+    "httpx>=0.28.1",
     "jupyterlab>=4.6.4",
     "nbstripout>=0.9.1",
     "pytest>=9.1.1",
