@@ -4,11 +4,8 @@
 // Settings
 // ---------------------------------------------------------------------------
 
-const SONG_URL = "songs/letitbe.json";
-const AUDIO_URLS = {
-  mix: "songs/letitbe_mix.mp3",
-  piano: "songs/letitbe_piano.mp3",
-};
+const API_SONGS = "/api/songs";
+const POLL_INTERVAL = 2000; // ms between two status checks while a song is processing
 
 const LOWEST_KEY = 21;   // A0
 const HIGHEST_KEY = 108; // C8
@@ -158,6 +155,17 @@ const controls = {
   sourceButtons: document.querySelectorAll(".source button"),
 };
 
+const libraryUi = {
+  panel: document.getElementById("library"),
+  toggle: document.getElementById("library-toggle"),
+  close: document.getElementById("library-close"),
+  addButton: document.getElementById("add-song"),
+  fileInput: document.getElementById("file-input"),
+  message: document.getElementById("library-message"),
+  list: document.getElementById("song-list"),
+  overlay: document.getElementById("drop-overlay"),
+};
+
 const state = {
   song: null,
   audio: players.mix, // the active player, which is also the clock
@@ -170,6 +178,11 @@ const state = {
   lastTime: 0,        // audio time of the previous frame, to detect new notes
   lastFrame: 0,       // real time of the previous frame, to animate the sparks
   sparks: [],
+  songs: [],          // the library, as returned by the server
+  currentId: null,    // id of the song being played
+  pollTimer: null,
+  pendingDelete: null,
+  dragDepth: 0,
 };
 
 function resizeCanvas() {
@@ -535,6 +548,7 @@ function songDuration() {
 }
 
 function togglePlayback() {
+  if (!state.song) return;
   if (state.audio.paused) {
     state.audio.play().catch((error) => console.error(error));
   } else {
@@ -632,6 +646,10 @@ function connectControls() {
   }
 
   window.addEventListener("keydown", (event) => {
+    if (event.code === "Escape" && !libraryUi.panel.hidden) {
+      setLibraryOpen(false);
+      return;
+    }
     // Buttons, sliders and lists already react to the keyboard on their own.
     if (event.target.closest("button, input, select")) return;
 
@@ -647,35 +665,280 @@ function connectControls() {
 }
 
 // ---------------------------------------------------------------------------
+// Library
+// ---------------------------------------------------------------------------
+
+const STATUS_LABELS = {
+  queued: "En attente",
+  processing: "Traitement en cours…",
+  ready: "Prêt",
+  error: "Échec du traitement",
+};
+
+function rememberSong(id) {
+  try {
+    localStorage.setItem("lastSong", id);
+  } catch {
+    // Not remembered: the most recent song will be opened next time.
+  }
+}
+
+function rememberedSong() {
+  try {
+    return localStorage.getItem("lastSong");
+  } catch {
+    return null;
+  }
+}
+
+function showLibraryMessage(text, isError = false) {
+  libraryUi.message.textContent = text;
+  libraryUi.message.classList.toggle("is-error", isError);
+}
+
+function setLibraryOpen(open) {
+  libraryUi.panel.hidden = !open;
+  libraryUi.toggle.setAttribute("aria-expanded", String(open));
+  if (open) libraryUi.addButton.focus();
+}
+
+function formatDate(isoDate) {
+  return new Date(isoDate).toLocaleDateString("fr-FR", { day: "numeric", month: "short" });
+}
+
+/** Build the list of songs. Titles go through textContent, never innerHTML. */
+function renderSongList() {
+  const items = state.songs.map((info) => {
+    const item = document.createElement("li");
+
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "song";
+    button.disabled = info.status !== "ready";
+    button.setAttribute("aria-current", String(info.id === state.currentId));
+    button.addEventListener("click", () => openSong(info));
+
+    const title = document.createElement("span");
+    title.className = "song-title";
+    title.textContent = info.title;
+
+    const status = document.createElement("span");
+    status.className = "song-status";
+    status.textContent = info.status === "ready"
+      ? `Ajouté le ${formatDate(info.created_at)}`
+      : STATUS_LABELS[info.status];
+    if (info.status === "error") {
+      status.classList.add("is-error");
+      status.title = info.error ?? "";
+    }
+    button.append(title, status);
+
+    const remove = document.createElement("button");
+    remove.type = "button";
+    remove.className = "text-button delete";
+    const confirming = state.pendingDelete === info.id;
+    remove.textContent = confirming ? "Confirmer" : "Supprimer";
+    remove.classList.toggle("is-confirming", confirming);
+    remove.setAttribute("aria-label", `${confirming ? "Confirmer la suppression de" : "Supprimer"} ${info.title}`);
+    remove.hidden = info.status === "queued" || info.status === "processing";
+    remove.addEventListener("click", () => deleteSong(info));
+
+    item.append(button, remove);
+    return item;
+  });
+  libraryUi.list.replaceChildren(...items);
+
+  const count = state.songs.length;
+  libraryUi.toggle.textContent = count ? `Bibliothèque (${count})` : "Bibliothèque";
+}
+
+/** Tell the user when a song they were waiting for is ready, or has failed. */
+function reportFinishedSongs(previous) {
+  for (const info of state.songs) {
+    const before = previous.get(info.id);
+    if (before !== "queued" && before !== "processing") continue;
+    if (info.status === "ready") {
+      showLibraryMessage(`« ${info.title} » est prêt. Cliquez sur son titre pour le jouer.`);
+    } else if (info.status === "error") {
+      showLibraryMessage(`Le traitement de « ${info.title} » a échoué : ${info.error}`, true);
+    }
+  }
+}
+
+async function refreshLibrary() {
+  clearTimeout(state.pollTimer);
+  try {
+    const response = await fetch(API_SONGS);
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    const previous = new Map(state.songs.map((info) => [info.id, info.status]));
+    state.songs = await response.json();
+    reportFinishedSongs(previous);
+  } catch (error) {
+    showLibraryMessage("Le serveur ne répond pas. Lancez « uv run piano-tiles-ai serve », puis rechargez la page.", true);
+    console.error(error);
+    return;
+  }
+
+  // The song being played may have been deleted.
+  if (state.currentId && !state.songs.some((info) => info.id === state.currentId)) {
+    closeSong();
+  }
+  renderSongList();
+
+  const busy = state.songs.some((info) => info.status === "queued" || info.status === "processing");
+  if (busy) state.pollTimer = setTimeout(refreshLibrary, POLL_INTERVAL);
+
+  if (!state.currentId) {
+    const ready = state.songs.filter((info) => info.status === "ready");
+    const preferred = ready.find((info) => info.id === rememberedSong()) ?? ready[0];
+    if (preferred) {
+      await openSong(preferred);
+    } else if (!busy) {
+      document.getElementById("details").textContent = "Aucun morceau pour l'instant";
+      setLibraryOpen(true);
+    }
+  }
+}
+
+async function openSong(info) {
+  const base = `${API_SONGS}/${info.id}/files`;
+  try {
+    const response = await fetch(`${base}/song.json`);
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    const song = await response.json();
+
+    for (const player of Object.values(players)) player.pause();
+    state.song = song;
+    state.currentId = info.id;
+    state.lastTime = 0;
+    state.sparks = [];
+    players.mix.src = `${base}/mix.mp3`;
+    players.piano.src = `${base}/piano.mp3`;
+
+    document.getElementById("title").textContent = song.title;
+    document.getElementById("details").textContent =
+      `${song.notes.length} notes, ${formatTime(song.duration)}`;
+    rememberSong(info.id);
+    renderSongList();
+  } catch (error) {
+    showLibraryMessage(`Impossible d'ouvrir « ${info.title} ».`, true);
+    console.error(error);
+  }
+}
+
+function closeSong() {
+  for (const player of Object.values(players)) {
+    player.pause();
+    player.removeAttribute("src");
+    player.load();
+  }
+  state.song = null;
+  state.currentId = null;
+  document.getElementById("title").textContent = "Piano Tiles AI";
+  document.getElementById("details").textContent = "Aucun morceau sélectionné";
+}
+
+async function uploadSong(file) {
+  setLibraryOpen(true);
+  showLibraryMessage(`Envoi de « ${file.name} »…`);
+
+  const form = new FormData();
+  form.append("file", file);
+  let response;
+  try {
+    response = await fetch(API_SONGS, { method: "POST", body: form });
+  } catch (error) {
+    showLibraryMessage("Le serveur ne répond pas : le fichier n'a pas été envoyé.", true);
+    console.error(error);
+    return;
+  }
+  if (!response.ok) {
+    const body = await response.json().catch(() => ({}));
+    showLibraryMessage(body.detail ?? `L'envoi a échoué (erreur ${response.status}).`, true);
+    return;
+  }
+
+  const info = await response.json();
+  showLibraryMessage(info.status === "ready"
+    ? `« ${info.title} » était déjà dans la bibliothèque.`
+    : `« ${info.title} » est en cours de traitement. Comptez une à deux minutes.`);
+  await refreshLibrary();
+}
+
+async function deleteSong(info) {
+  // First click asks for confirmation, second click deletes.
+  if (state.pendingDelete !== info.id) {
+    state.pendingDelete = info.id;
+    renderSongList();
+    setTimeout(() => {
+      if (state.pendingDelete === info.id) {
+        state.pendingDelete = null;
+        renderSongList();
+      }
+    }, 4000);
+    return;
+  }
+
+  state.pendingDelete = null;
+  const response = await fetch(`${API_SONGS}/${info.id}`, { method: "DELETE" });
+  if (!response.ok) {
+    const body = await response.json().catch(() => ({}));
+    showLibraryMessage(body.detail ?? "La suppression a échoué.", true);
+  } else {
+    showLibraryMessage(`« ${info.title} » a été supprimé.`);
+  }
+  await refreshLibrary();
+}
+
+function connectLibrary() {
+  libraryUi.toggle.addEventListener("click", () => setLibraryOpen(libraryUi.panel.hidden));
+  libraryUi.close.addEventListener("click", () => setLibraryOpen(false));
+  libraryUi.addButton.addEventListener("click", () => libraryUi.fileInput.click());
+  libraryUi.fileInput.addEventListener("change", () => {
+    const [file] = libraryUi.fileInput.files;
+    if (file) uploadSong(file);
+    libraryUi.fileInput.value = "";
+  });
+
+  // Drag and drop anywhere on the page. dragenter and dragleave also fire
+  // when moving between child elements, hence the depth counter.
+  const carriesFiles = (event) => event.dataTransfer?.types.includes("Files");
+  window.addEventListener("dragenter", (event) => {
+    if (!carriesFiles(event)) return;
+    event.preventDefault();
+    state.dragDepth++;
+    libraryUi.overlay.hidden = false;
+  });
+  window.addEventListener("dragover", (event) => {
+    if (carriesFiles(event)) event.preventDefault(); // allows dropping
+  });
+  window.addEventListener("dragleave", (event) => {
+    if (!carriesFiles(event)) return;
+    state.dragDepth = Math.max(0, state.dragDepth - 1);
+    if (state.dragDepth === 0) libraryUi.overlay.hidden = true;
+  });
+  window.addEventListener("drop", (event) => {
+    if (!carriesFiles(event)) return;
+    event.preventDefault(); // otherwise the browser opens the file itself
+    state.dragDepth = 0;
+    libraryUi.overlay.hidden = true;
+    const [file] = event.dataTransfer.files;
+    if (file) uploadSong(file);
+  });
+}
+
+// ---------------------------------------------------------------------------
 // Main
 // ---------------------------------------------------------------------------
 
-async function loadSong(url) {
-  const response = await fetch(url);
-  if (!response.ok) {
-    throw new Error(`Impossible de charger ${url} (erreur HTTP ${response.status})`);
-  }
-  return response.json();
-}
-
-async function main() {
+function main() {
   resizeCanvas();
   window.addEventListener("resize", resizeCanvas);
   connectControls();
+  connectLibrary();
   setSpeed(1);
   requestAnimationFrame(drawFrame);
-
-  try {
-    state.song = await loadSong(SONG_URL);
-    players.mix.src = AUDIO_URLS.mix;
-    players.piano.src = AUDIO_URLS.piano;
-    document.getElementById("title").textContent = state.song.title;
-    document.getElementById("details").textContent =
-      `${state.song.notes.length} notes, ${formatTime(state.song.duration)}`;
-  } catch (error) {
-    document.getElementById("details").textContent = error.message;
-    console.error(error);
-  }
+  refreshLibrary();
 }
 
 main();

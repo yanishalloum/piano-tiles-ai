@@ -17,13 +17,38 @@
         <h1 id="title">Piano Tiles AI</h1>
         <p id="details">Chargement du morceau…</p>
       </div>
-      <p class="legend">
-        <span class="swatch swatch-left" aria-hidden="true"></span>Main gauche
-        <span class="swatch swatch-right" aria-hidden="true"></span>Main droite
-      </p>
+      <div class="masthead-side">
+        <p class="legend">
+          <span class="swatch swatch-left" aria-hidden="true"></span>Main gauche
+          <span class="swatch swatch-right" aria-hidden="true"></span>Main droite
+        </p>
+        <button id="library-toggle" class="library-toggle" type="button" aria-expanded="false" aria-controls="library">
+          Bibliothèque
+        </button>
+      </div>
     </header>
 
-    <canvas id="stage" aria-label="Les notes du morceau tombent vers le clavier"></canvas>
+    <div class="stage-wrap">
+      <canvas id="stage" aria-label="Les notes du morceau tombent vers le clavier"></canvas>
+
+      <aside id="library" class="library" aria-label="Bibliothèque" hidden>
+        <div class="library-head">
+          <h2>Bibliothèque</h2>
+          <button id="library-close" class="text-button" type="button">Fermer</button>
+        </div>
+        <div class="add-song">
+          <button id="add-song" class="add-button" type="button">Ajouter un morceau</button>
+          <input id="file-input" class="visually-hidden" type="file" accept=".mp3,.wav,.flac,.ogg,.m4a,audio/*" tabindex="-1">
+          <p class="hint">ou déposez un fichier audio n'importe où sur la page</p>
+        </div>
+        <p id="library-message" class="library-message" role="status"></p>
+        <ul id="song-list" class="song-list"></ul>
+      </aside>
+
+      <div id="drop-overlay" class="drop-overlay" hidden>
+        <p>Déposez le fichier pour l'ajouter à la bibliothèque</p>
+      </div>
+    </div>
 
     <section class="transport" aria-label="Commandes de lecture">
       <div class="buttons">
