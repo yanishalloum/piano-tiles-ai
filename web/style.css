@@ -461,6 +461,51 @@ input[type="range"]::-moz-range-thumb {
   text-align: center;
 }
 
+.link-form {
+  margin: 18px 0 4px;
+}
+
+.link-label {
+  display: block;
+  margin-bottom: 6px;
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.link-row {
+  display: flex;
+  gap: 8px;
+}
+
+.link-row input {
+  flex: 1;
+  min-width: 0;
+  padding: 7px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--midnight);
+  color: var(--ivory);
+  font: inherit;
+  font-size: 15px;
+}
+
+.link-row input::placeholder {
+  color: var(--muted);
+  font-style: italic;
+}
+
+.link-button {
+  padding: 7px 14px;
+  border: 1px solid var(--brass);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--brass);
+}
+
+.link-button:hover {
+  background: rgba(208, 162, 79, 0.08);
+}
+
 .library-message {
   min-height: 1.5em;
   margin: 10px 0;

@@ -16,10 +16,11 @@ from typing import Literal
 from fastapi import FastAPI, Form, HTTPException, UploadFile
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, HttpUrl
 
 from piano_tiles_ai.library import (
     ALLOWED_SUFFIXES,
+    BUSY_STATUSES,
     HandCorrection,
     Library,
     SongInfo,
@@ -42,6 +43,13 @@ class CorrectionIn(BaseModel):
 
 
 MAX_CORRECTIONS = 50_000
+
+
+class LinkIn(BaseModel):
+    """A link to a video. HttpUrl only accepts http:// and https:// addresses."""
+
+    url: HttpUrl
+    title: str = ""
 
 
 def create_app(
@@ -85,7 +93,7 @@ def create_app(
 
     # Songs left unfinished when the server stopped are processed again.
     for song in library.songs():
-        if song.status in ("queued", "processing"):
+        if song.status in BUSY_STATUSES:
             library.set_status(song.id, "queued")
             enqueue(song.id)
 
@@ -125,11 +133,20 @@ def create_app(
             enqueue(info.id)
         return info
 
+    @app.post("/api/songs/from-url", status_code=202)
+    def add_link(link: LinkIn) -> SongInfo:
+        """Add a YouTube, TikTok... link: the sound is downloaded, then processed."""
+        known = {song.id for song in library.songs()}
+        info = library.add_url(str(link.url), link.title)
+        if info.id not in known:
+            enqueue(info.id)
+        return info
+
     @app.delete("/api/songs/{song_id}", status_code=204)
     def delete_song(song_id: str) -> None:
         """Delete a song and its files."""
         info = info_or_404(song_id)
-        if info.status in ("queued", "processing"):
+        if info.status in BUSY_STATUSES:
             raise HTTPException(status_code=409, detail="Le morceau est en cours de traitement")
         library.delete(song_id)
 

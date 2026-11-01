@@ -51,9 +51,16 @@
         </div>
         <div class="add-song">
           <button id="add-song" class="add-button" type="button">Ajouter un morceau</button>
-          <input id="file-input" class="visually-hidden" type="file" accept=".mp3,.wav,.flac,.ogg,.m4a,audio/*" tabindex="-1">
-          <p class="hint">ou déposez un fichier audio n'importe où sur la page</p>
+          <input id="file-input" class="visually-hidden" type="file" accept=".mp3,.wav,.flac,.ogg,.m4a,.mp4,.mov,.webm,.mkv,audio/*,video/*" tabindex="-1">
+          <p class="hint">ou déposez un fichier audio ou vidéo n'importe où sur la page</p>
         </div>
+        <form id="link-form" class="link-form">
+          <label for="link-input" class="link-label">Depuis un lien</label>
+          <div class="link-row">
+            <input id="link-input" type="url" placeholder="YouTube, TikTok…" autocomplete="off" required>
+            <button class="link-button" type="submit">Ajouter</button>
+          </div>
+        </form>
         <p id="library-message" class="library-message" role="status"></p>
         <ul id="song-list" class="song-list"></ul>
       </aside>

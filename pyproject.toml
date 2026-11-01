@@ -25,6 +25,7 @@ dependencies = [
     "torchaudio==2.11.0",
     "transkun>=2.0.1",
     "uvicorn>=0.54.0",
+    "yt-dlp>=2026.10.26",
 ]
 
 [project.scripts]

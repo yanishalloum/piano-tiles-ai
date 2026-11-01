@@ -5,12 +5,15 @@ Layout of the library folder:
     library/
         3f9a1c0b2e7d4a65/       one folder per song, named after its content hash
             info.json           title, status, date (SongInfo)
-            original.mp3        the uploaded file, untouched
+            original.mp3        the uploaded or downloaded file, untouched
+            audio.flac          the sound of a video (only for videos)
             song.json           hand-labeled notes, read by the visualizer
             mix.mp3             the full song, for the browser
             piano.mp3           the isolated piano, for the browser
+            corrections.json    notes moved to the other hand by the user
 """
 
+import hashlib
 import json
 import os
 import re
@@ -27,9 +30,13 @@ from piano_tiles_ai.export import save_song_json
 from piano_tiles_ai.paths import PROJECT_ROOT
 
 LIBRARY_DIR = PROJECT_ROOT / "library"
-ALLOWED_SUFFIXES = {".mp3", ".wav", ".flac", ".ogg", ".m4a"}
+AUDIO_SUFFIXES = {".mp3", ".wav", ".flac", ".ogg", ".m4a"}
+VIDEO_SUFFIXES = {".mp4", ".mov", ".webm", ".mkv"}
+ALLOWED_SUFFIXES = AUDIO_SUFFIXES | VIDEO_SUFFIXES
+MAX_DOWNLOAD_BYTES = 200 * 1024 * 1024  # 200 MB, as for uploads
 
-Status = Literal["queued", "processing", "ready", "error"]
+Status = Literal["queued", "downloading", "processing", "ready", "error"]
+BUSY_STATUSES = ("queued", "downloading", "processing")
 
 _SONG_ID = re.compile(r"[0-9a-f]{16}")
 
@@ -56,6 +63,46 @@ class SongInfo:
     status: Status
     created_at: str
     error: str | None = None
+    source_url: str | None = None  # set for songs added from a link
+
+
+def extract_audio(video: Path, target: Path) -> None:
+    """Keep only the sound of a video, without loss (FLAC)."""
+    subprocess.run(
+        ["ffmpeg", "-y", "-loglevel", "error", "-i", str(video), "-vn", "-c:a", "flac", str(target)],
+        check=True,
+    )
+
+
+def download_audio(url: str, folder: Path) -> tuple[Path, str | None]:
+    """Download the sound of a YouTube, TikTok... video with yt-dlp.
+
+    Returns:
+        The downloaded file (original.<ext>) and the title of the video.
+    """
+    from yt_dlp import YoutubeDL  # imported here: only needed for links
+
+    options = {
+        "format": "bestaudio/best",              # the audio track alone when the site offers it
+        "outtmpl": str(folder / "original.%(ext)s"),
+        "noplaylist": True,                      # a link inside a playlist: only this video
+        "max_filesize": MAX_DOWNLOAD_BYTES,
+        "quiet": True,
+        "no_warnings": True,
+    }
+    from yt_dlp.utils import DownloadError
+
+    try:
+        with YoutubeDL(options) as downloader:
+            info = downloader.extract_info(url, download=True)
+            path = Path(downloader.prepare_filename(info))
+    except DownloadError as error:
+        # yt-dlp messages start with "ERROR: [site] id:"; keep the readable end.
+        reason = str(error).removeprefix("ERROR: ").split(": ", 1)[-1].split("; please report")[0]
+        raise RuntimeError(f"Téléchargement impossible : {reason}") from None
+    if not path.is_file():
+        raise RuntimeError("Le téléchargement n'a produit aucun fichier (vidéo trop lourde ?)")
+    return path, info.get("title")
 
 
 def encode_mp3(source: Path, target: Path, bitrate: str = "192k") -> None:
@@ -105,12 +152,10 @@ class Library:
                     songs.append(info)
         return sorted(songs, key=lambda song: song.created_at, reverse=True)
 
-    def original(self, song_id: str) -> Path:
-        """Path of the uploaded file of a song."""
-        matches = sorted(self.folder(song_id).glob("original.*"))
-        if not matches:
-            raise FileNotFoundError(f"No original file for song {song_id}")
-        return matches[0]
+    def original(self, song_id: str) -> Path | None:
+        """Path of the uploaded or downloaded file of a song (None if not downloaded yet)."""
+        matches = sorted(p for p in self.folder(song_id).glob("original.*") if not p.name.endswith(".part"))
+        return matches[0] if matches else None
 
     # --- Writing -------------------------------------------------------------
 
@@ -157,15 +202,44 @@ class Library:
             self._write_info(info)
             return info
 
-    def set_status(self, song_id: str, status: Status, error: str | None = None) -> SongInfo:
-        """Change the status of a song and return its updated information."""
+    def add_url(self, url: str, title: str = "") -> SongInfo:
+        """Register a link to download (YouTube, TikTok...) as a queued song.
+
+        The content is not known before the download, so the identifier comes
+        from the link itself: the same link is never added twice.
+        """
+        song_id = hashlib.sha256(url.encode("utf-8")).hexdigest()[:16]
+        with self._lock:
+            existing = self.get(song_id)
+            if existing is not None:
+                return existing
+            self.folder(song_id).mkdir()
+            info = SongInfo(
+                id=song_id,
+                title=title.strip() or url,
+                status="queued",
+                created_at=datetime.now(timezone.utc).isoformat(),
+                source_url=url,
+            )
+            self._write_info(info)
+            return info
+
+    def _update(self, song_id: str, **changes) -> SongInfo:
         with self._lock:
             info = self.get(song_id)
             if info is None:
                 raise KeyError(song_id)
-            info = replace(info, status=status, error=error)
+            info = replace(info, **changes)
             self._write_info(info)
             return info
+
+    def set_status(self, song_id: str, status: Status, error: str | None = None) -> SongInfo:
+        """Change the status of a song and return its updated information."""
+        return self._update(song_id, status=status, error=error)
+
+    def rename(self, song_id: str, title: str) -> SongInfo:
+        """Change the title of a song."""
+        return self._update(song_id, title=title)
 
     def corrections(self, song_id: str) -> list[HandCorrection]:
         """Hand corrections made by the user (empty if there are none)."""
@@ -202,8 +276,13 @@ def process_library_song(
     process=None,
     separate=None,
     encode=encode_mp3,
+    download=download_audio,
+    extract=extract_audio,
 ) -> SongInfo:
     """Run the full pipeline on a library song and write the visualizer files.
+
+    Steps: download the link (if any), take the sound out of a video (if it
+    is one), find the notes, then encode the two MP3 files for the browser.
 
     The heavy functions can be replaced (for tests): `process` defaults to
     pipeline.process_song and `separate` to separation.separate_piano.
@@ -211,9 +290,22 @@ def process_library_song(
     Returns:
         The final information of the song, with status "ready" or "error".
     """
-    info = library.set_status(song_id, "processing")
+    info = library.get(song_id)
     folder = library.folder(song_id)
     try:
+        original = library.original(song_id)
+        if original is None:  # a link that was not downloaded yet
+            library.set_status(song_id, "downloading")
+            original, video_title = download(info.source_url, folder)
+            if video_title and info.title == info.source_url:
+                info = library.rename(song_id, video_title)
+
+        info = library.set_status(song_id, "processing")
+        audio = original
+        if original.suffix.lower() not in AUDIO_SUFFIXES:  # a video, or a format we do not read
+            audio = folder / "audio.flac"
+            extract(original, audio)
+
         # Imported here, inside the try: if loading the models fails, the song
         # is marked as failed instead of staying "processing" forever.
         if process is None:
@@ -221,11 +313,10 @@ def process_library_song(
         if separate is None:
             from piano_tiles_ai.separation import separate_piano as separate
 
-        original = library.original(song_id)
-        notes = process(original)
+        notes = process(audio)
         save_song_json(notes, folder / "song.json", info.title)
-        encode(original, folder / "mix.mp3")
-        encode(separate(original), folder / "piano.mp3")  # cached: instant after process()
+        encode(audio, folder / "mix.mp3")
+        encode(separate(audio), folder / "piano.mp3")  # cached: instant after process()
     except Exception as error:  # report any failure to the user instead of crashing the server
         return library.set_status(song_id, "error", error=str(error))
     return library.set_status(song_id, "ready")

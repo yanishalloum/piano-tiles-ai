@@ -165,6 +165,8 @@ const libraryUi = {
   close: document.getElementById("library-close"),
   addButton: document.getElementById("add-song"),
   fileInput: document.getElementById("file-input"),
+  linkForm: document.getElementById("link-form"),
+  linkInput: document.getElementById("link-input"),
   message: document.getElementById("library-message"),
   list: document.getElementById("song-list"),
   overlay: document.getElementById("drop-overlay"),
@@ -867,10 +869,15 @@ function connectCorrections() {
 
 const STATUS_LABELS = {
   queued: "En attente",
+  downloading: "Téléchargement…",
   processing: "Traitement en cours…",
   ready: "Prêt",
   error: "Échec du traitement",
 };
+
+function isBusy(status) {
+  return status === "queued" || status === "downloading" || status === "processing";
+}
 
 function rememberSong(id) {
   try {
@@ -937,7 +944,7 @@ function renderSongList() {
     remove.textContent = confirming ? "Confirmer" : "Supprimer";
     remove.classList.toggle("is-confirming", confirming);
     remove.setAttribute("aria-label", `${confirming ? "Confirmer la suppression de" : "Supprimer"} ${info.title}`);
-    remove.hidden = info.status === "queued" || info.status === "processing";
+    remove.hidden = isBusy(info.status);
     remove.addEventListener("click", () => deleteSong(info));
 
     item.append(button, remove);
@@ -953,7 +960,7 @@ function renderSongList() {
 function reportFinishedSongs(previous) {
   for (const info of state.songs) {
     const before = previous.get(info.id);
-    if (before !== "queued" && before !== "processing") continue;
+    if (!isBusy(before)) continue;
     if (info.status === "ready") {
       showLibraryMessage(`« ${info.title} » est prêt. Cliquez sur son titre pour le jouer.`);
     } else if (info.status === "error") {
@@ -982,7 +989,7 @@ async function refreshLibrary() {
   }
   renderSongList();
 
-  const busy = state.songs.some((info) => info.status === "queued" || info.status === "processing");
+  const busy = state.songs.some((info) => isBusy(info.status));
   if (busy) state.pollTimer = setTimeout(refreshLibrary, POLL_INTERVAL);
 
   if (!state.currentId) {
@@ -1044,28 +1051,57 @@ function closeSong() {
 async function uploadSong(file) {
   setLibraryOpen(true);
   showLibraryMessage(`Envoi de « ${file.name} »…`);
-
   const form = new FormData();
   form.append("file", file);
+  await sendSong(fetch(API_SONGS, { method: "POST", body: form }));
+}
+
+/** A link to a video: the server downloads its sound, then processes it. */
+async function addLink(url) {
+  setLibraryOpen(true);
+  showLibraryMessage("Envoi du lien…");
+  await sendSong(fetch(`${API_SONGS}/from-url`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ url }),
+  }));
+}
+
+/** Common end of uploadSong and addLink: report the answer of the server. */
+async function sendSong(request) {
   let response;
   try {
-    response = await fetch(API_SONGS, { method: "POST", body: form });
+    response = await request;
   } catch (error) {
-    showLibraryMessage("Le serveur ne répond pas : le fichier n'a pas été envoyé.", true);
+    showLibraryMessage("Le serveur ne répond pas : rien n'a été envoyé.", true);
     console.error(error);
-    return;
+    return false;
   }
   if (!response.ok) {
     const body = await response.json().catch(() => ({}));
-    showLibraryMessage(body.detail ?? `L'envoi a échoué (erreur ${response.status}).`, true);
-    return;
+    const detail = response.status === 422 ? "Ce lien n'est pas valide (il doit commencer par https://)." : body.detail;
+    showLibraryMessage(detail ?? `L'envoi a échoué (erreur ${response.status}).`, true);
+    return false;
   }
 
   const info = await response.json();
   showLibraryMessage(info.status === "ready"
     ? `« ${info.title} » était déjà dans la bibliothèque.`
-    : `« ${info.title} » est en cours de traitement. Comptez une à deux minutes.`);
+    : info.source_url
+      ? "Lien reçu : le son va être téléchargé puis traité. Comptez deux à trois minutes."
+      : `« ${info.title} » est en cours de traitement. Comptez une à deux minutes.`);
   await refreshLibrary();
+  return true;
+}
+
+/** True for text that looks like a web link. */
+function isLink(text) {
+  try {
+    const url = new URL(text.trim());
+    return url.protocol === "https:" || url.protocol === "http:";
+  } catch {
+    return false;
+  }
 }
 
 async function deleteSong(info) {
@@ -1097,15 +1133,33 @@ function connectLibrary() {
   libraryUi.toggle.addEventListener("click", () => setLibraryOpen(libraryUi.panel.hidden));
   libraryUi.close.addEventListener("click", () => setLibraryOpen(false));
   libraryUi.addButton.addEventListener("click", () => libraryUi.fileInput.click());
+  libraryUi.linkForm.addEventListener("submit", async (event) => {
+    event.preventDefault(); // the page must not reload
+    const url = libraryUi.linkInput.value.trim();
+    if (!url) return;
+    if (await addLink(url)) libraryUi.linkInput.value = "";
+  });
+
+  // Ctrl + V of a link anywhere on the page (except in a text field).
+  window.addEventListener("paste", (event) => {
+    if (event.target.closest("input, textarea")) return;
+    const text = event.clipboardData?.getData("text") ?? "";
+    if (isLink(text)) addLink(text.trim());
+  });
+
   libraryUi.fileInput.addEventListener("change", () => {
     const [file] = libraryUi.fileInput.files;
     if (file) uploadSong(file);
     libraryUi.fileInput.value = "";
   });
 
-  // Drag and drop anywhere on the page. dragenter and dragleave also fire
-  // when moving between child elements, hence the depth counter.
-  const carriesFiles = (event) => event.dataTransfer?.types.includes("Files");
+  // Drag and drop anywhere on the page: a file, or a link dragged from another
+  // tab. dragenter and dragleave also fire when moving between child
+  // elements, hence the depth counter.
+  const carriesFiles = (event) => {
+    const types = event.dataTransfer?.types ?? [];
+    return types.includes("Files") || types.includes("text/uri-list");
+  };
   window.addEventListener("dragenter", (event) => {
     if (!carriesFiles(event)) return;
     event.preventDefault();
@@ -1126,7 +1180,12 @@ function connectLibrary() {
     state.dragDepth = 0;
     libraryUi.overlay.hidden = true;
     const [file] = event.dataTransfer.files;
-    if (file) uploadSong(file);
+    const link = event.dataTransfer.getData("text/uri-list").split("\n")[0].trim();
+    if (file) {
+      uploadSong(file);
+    } else if (isLink(link)) {
+      addLink(link);
+    }
   });
 }
 

@@ -136,3 +136,75 @@ def test_corrections_are_saved_and_read_back(library, song_file):
     assert library.corrections(song_id) == corrections
     library.save_corrections(song_id, [])
     assert library.corrections(song_id) == []
+
+
+def fake_download(url, folder):
+    path = folder / "original.webm"
+    path.write_bytes(b"downloaded audio")
+    return path, "Video Title"
+
+
+def test_links_are_added_once(library):
+    first = library.add_url("https://www.youtube.com/watch?v=abc")
+    second = library.add_url("https://www.youtube.com/watch?v=abc", "Other title")
+    assert first == second
+    assert first.status == "queued"
+    assert first.source_url == "https://www.youtube.com/watch?v=abc"
+    assert library.original(first.id) is None
+
+
+def test_links_are_downloaded_then_processed(library):
+    song_id = library.add_url("https://www.tiktok.com/@someone/video/1").id
+    extracted = []
+
+    def fake_extract(video, target):
+        extracted.append(video.name)
+        target.write_bytes(b"flac")
+
+    info = process_library_song(
+        library, song_id, process=fake_process, separate=fake_separate,
+        encode=fake_encode, download=fake_download, extract=fake_extract,
+    )
+    assert info.status == "ready"
+    assert info.title == "Video Title"  # the title of the video replaces the link
+    assert extracted == ["original.webm"]  # not an audio format we read: converted first
+
+
+def test_a_title_given_by_the_user_is_kept(library):
+    song_id = library.add_url("https://youtu.be/abc", "Mon titre").id
+    info = process_library_song(
+        library, song_id, process=fake_process, separate=fake_separate,
+        encode=fake_encode, download=fake_download, extract=lambda video, target: target.write_bytes(b""),
+    )
+    assert info.title == "Mon titre"
+
+
+def test_failed_downloads_are_reported(library):
+    def failing_download(url, folder):
+        raise RuntimeError("Téléchargement impossible : Video unavailable")
+
+    song_id = library.add_url("https://youtu.be/missing").id
+    info = process_library_song(library, song_id, process=fake_process, download=failing_download)
+    assert info.status == "error"
+    assert "Video unavailable" in info.error
+
+
+def test_the_sound_of_a_video_is_extracted(library, tmp_path):
+    video = tmp_path / "clip.mp4"
+    video.write_bytes(b"fake video")
+    song_id = library.add(video, "Clip").id
+    seen = []
+
+    def fake_extract(source, target):
+        target.write_bytes(b"flac")
+
+    def recording_process(path):
+        seen.append(path.name)
+        return fake_process(path)
+
+    info = process_library_song(
+        library, song_id, process=recording_process, separate=fake_separate,
+        encode=fake_encode, extract=fake_extract,
+    )
+    assert info.status == "ready"
+    assert seen == ["audio.flac"]

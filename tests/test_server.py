@@ -133,3 +133,15 @@ def test_corrections_need_a_ready_song(library, tmp_path):
     song_id = upload(test_client).json()["id"]
     response = test_client.put(f"/api/songs/{song_id}/corrections", json=[])
     assert response.status_code == 409
+
+
+def test_links_are_accepted(client):
+    response = client.post("/api/songs/from-url", json={"url": "https://youtu.be/abc", "title": "Song"})
+    assert response.status_code == 202
+    song_id = response.json()["id"]
+    assert client.get(f"/api/songs/{song_id}").json()["status"] == "ready"
+
+
+def test_only_web_links_are_accepted(client):
+    for url in ["file:///etc/passwd", "not a link", "ftp://example.com/song.mp3"]:
+        assert client.post("/api/songs/from-url", json={"url": url}).status_code == 422
