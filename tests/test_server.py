@@ -108,3 +108,28 @@ def test_crashes_in_the_background_are_reported(library, tmp_path):
     info = library.get(song["id"])
     assert info.status == "error"
     assert "GPU out of memory" in info.error
+
+
+def test_corrections_round_trip(client):
+    song_id = upload(client).json()["id"]
+    url = f"/api/songs/{song_id}/corrections"
+    assert client.get(url).json() == []
+    corrections = [{"pitch": 60, "start": 1.2504, "hand": "left"}]
+    assert client.put(url, json=corrections).status_code == 204
+    assert client.get(url).json() == [{"pitch": 60, "start": 1.25, "hand": "left"}]
+
+
+def test_invalid_corrections_are_rejected(client):
+    song_id = upload(client).json()["id"]
+    url = f"/api/songs/{song_id}/corrections"
+    assert client.put(url, json=[{"pitch": 60, "start": 1.0, "hand": "middle"}]).status_code == 422
+    assert client.put(url, json=[{"pitch": 200, "start": 1.0, "hand": "left"}]).status_code == 422
+    assert client.get(url).json() == []
+
+
+def test_corrections_need_a_ready_song(library, tmp_path):
+    app = create_app(library=library, process=lambda lib, song_id: None, executor=ImmediateExecutor(), web_dir=tmp_path)
+    test_client = TestClient(app)
+    song_id = upload(test_client).json()["id"]
+    response = test_client.put(f"/api/songs/{song_id}/corrections", json=[])
+    assert response.status_code == 409

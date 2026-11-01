@@ -118,7 +118,8 @@ h1 {
 }
 
 .library-toggle:hover,
-.library-toggle[aria-expanded="true"] {
+.library-toggle[aria-expanded="true"],
+.library-toggle[aria-pressed="true"] {
   border-color: var(--brass);
   color: var(--brass);
 }
@@ -136,6 +137,63 @@ h1 {
   height: 100%;
   border-radius: 10px;
   cursor: pointer;
+}
+
+/* --- Hand corrections -------------------------------------------------- */
+
+.edit-bar {
+  position: absolute;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: center;
+  gap: 4px 18px;
+  width: max-content;
+  max-width: calc(100% - 24px);
+  padding: 8px 18px;
+  border: 1px solid rgba(208, 162, 79, 0.45);
+  border-radius: 10px;
+  background: rgba(16, 23, 41, 0.92);
+  font-size: 15px;
+}
+
+.edit-help {
+  margin: 0;
+  color: var(--muted);
+  font-style: italic;
+}
+
+kbd {
+  padding: 0 5px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  font-family: inherit;
+  font-style: normal;
+  font-size: 13px;
+  color: var(--ivory);
+}
+
+.edit-count {
+  color: var(--brass);
+  font-variant-numeric: tabular-nums;
+}
+
+.text-button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.edit-status {
+  min-width: 12ch;
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.edit-status.is-error {
+  color: #e88b7a;
 }
 
 /* --- Transport ----------------------------------------------------------- */

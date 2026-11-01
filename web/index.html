@@ -22,6 +22,9 @@
           <span class="swatch swatch-left" aria-hidden="true"></span>Main gauche
           <span class="swatch swatch-right" aria-hidden="true"></span>Main droite
         </p>
+        <button id="edit-toggle" class="library-toggle" type="button" aria-pressed="false">
+          Corriger les mains
+        </button>
         <button id="library-toggle" class="library-toggle" type="button" aria-expanded="false" aria-controls="library">
           Bibliothèque
         </button>
@@ -30,6 +33,16 @@
 
     <div class="stage-wrap">
       <canvas id="stage" aria-label="Les notes du morceau tombent vers le clavier"></canvas>
+
+      <div id="edit-bar" class="edit-bar" hidden>
+        <p class="edit-help">
+          Cliquez une tuile pour la passer à l'autre main. <kbd>Maj</kbd> + clic&nbsp;: tout l'accord.
+          Molette&nbsp;: avancer ou reculer.
+        </p>
+        <span id="edit-count" class="edit-count"></span>
+        <button id="undo" class="text-button" type="button" title="Ctrl + Z">Annuler</button>
+        <span id="edit-status" class="edit-status" role="status"></span>
+      </div>
 
       <aside id="library" class="library" aria-label="Bibliothèque" hidden>
         <div class="library-head">

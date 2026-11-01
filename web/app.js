@@ -45,6 +45,10 @@ const COLORS = {
   },
 };
 
+const SAVE_DELAY = 600;     // ms of calm before corrections are sent to the server
+const CHORD_WINDOW = 0.03;  // s: notes starting this close together form a chord
+const SCRUB_SPEED = 0.004;  // s of music per pixel of mouse wheel, in edit mode
+
 const REDUCED_MOTION = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
 // ---------------------------------------------------------------------------
@@ -166,6 +170,14 @@ const libraryUi = {
   overlay: document.getElementById("drop-overlay"),
 };
 
+const editUi = {
+  toggle: document.getElementById("edit-toggle"),
+  bar: document.getElementById("edit-bar"),
+  undo: document.getElementById("undo"),
+  count: document.getElementById("edit-count"),
+  status: document.getElementById("edit-status"),
+};
+
 const state = {
   song: null,
   audio: players.mix, // the active player, which is also the clock
@@ -182,7 +194,13 @@ const state = {
   currentId: null,    // id of the song being played
   pollTimer: null,
   pendingDelete: null,
+  pendingSave: null,  // function that saves corrections not yet sent
   dragDepth: 0,
+  tiles: [],          // tiles drawn in the last frame, to find the one under the mouse
+  editing: false,     // hand-correction mode
+  hovered: null,      // note under the mouse in edit mode
+  history: [],        // past corrections, for undo: each entry is a list of {note, hand}
+  saveTimer: null,
 };
 
 function resizeCanvas() {
@@ -295,6 +313,19 @@ function drawTile(note, rect, withLabel) {
   ctx.lineWidth = 1;
   ctx.stroke();
   ctx.globalAlpha = 1;
+
+  if (note === state.hovered) {
+    ctx.strokeStyle = COLORS.ivory;
+    ctx.lineWidth = 2;
+    ctx.stroke();
+  }
+  if (note.hand !== note.modelHand && rect.height > 8) {
+    // A small ivory dot marks the notes corrected by hand.
+    ctx.fillStyle = COLORS.ivory;
+    ctx.beginPath();
+    ctx.arc(rect.x + rect.width / 2, rect.y + 5, Math.min(2.5, rect.width / 4), 0, 2 * Math.PI);
+    ctx.fill();
+  }
 
   if (!withLabel || state.convention === "none" || rect.height < 18) return;
   const label = noteName(note.pitch, state.convention);
@@ -519,6 +550,7 @@ function drawFrame(now) {
     }
   }
   state.lastTime = time;
+  state.tiles = tiles;
 
   drawBeams(activeNotes, hitLine);
   // White-key tiles first, so that the narrower black-key tiles stay visible on top.
@@ -619,7 +651,13 @@ function updateTimeline(time) {
 // ---------------------------------------------------------------------------
 
 function connectControls() {
-  canvas.addEventListener("click", togglePlayback);
+  canvas.addEventListener("click", (event) => {
+    if (state.editing) {
+      correctAt(event);
+    } else {
+      togglePlayback();
+    }
+  });
   controls.play.addEventListener("click", togglePlayback);
   controls.back.addEventListener("click", () => skip(-SKIP_SECONDS));
   controls.forward.addEventListener("click", () => skip(SKIP_SECONDS));
@@ -653,7 +691,10 @@ function connectControls() {
     // Buttons, sliders and lists already react to the keyboard on their own.
     if (event.target.closest("button, input, select")) return;
 
-    if (event.code === "Space") {
+    if (state.editing && (event.ctrlKey || event.metaKey) && event.code === "KeyZ") {
+      event.preventDefault();
+      undoCorrection();
+    } else if (event.code === "Space") {
       event.preventDefault();
       togglePlayback();
     } else if (event.code === "ArrowLeft") {
@@ -662,6 +703,162 @@ function connectControls() {
       skip(SKIP_SECONDS);
     }
   });
+}
+
+// ---------------------------------------------------------------------------
+// Hand corrections
+// ---------------------------------------------------------------------------
+
+/** Notes are identified by pitch and start time, rounded like in song.json. */
+function noteKey(pitch, start) {
+  return `${pitch}@${start.toFixed(3)}`;
+}
+
+/** Load the corrections saved on the server and apply them to the notes. */
+async function applySavedCorrections(songId, notes) {
+  for (const note of notes) note.modelHand = note.hand; // keep the model's answer
+  let corrections = [];
+  try {
+    const response = await fetch(`${API_SONGS}/${songId}/corrections`);
+    if (response.ok) corrections = await response.json();
+  } catch (error) {
+    console.error(error); // without corrections, the song still plays
+  }
+  const hands = new Map(corrections.map((c) => [noteKey(c.pitch, c.start), c.hand]));
+  for (const note of notes) {
+    const hand = hands.get(noteKey(note.pitch, note.start));
+    if (hand) note.hand = hand;
+  }
+}
+
+function correctedNotes() {
+  return state.song ? state.song.notes.filter((note) => note.hand !== note.modelHand) : [];
+}
+
+function setEditing(editing) {
+  state.editing = editing && state.song !== null;
+  state.hovered = null;
+  canvas.style.cursor = "";
+  editUi.toggle.setAttribute("aria-pressed", String(state.editing));
+  editUi.bar.hidden = !state.editing;
+  if (state.editing) {
+    state.audio.pause(); // a still image is easier to click
+    updateEditBar();
+  }
+}
+
+function updateEditBar() {
+  const count = correctedNotes().length;
+  editUi.count.textContent = count === 0 ? "Aucune correction"
+    : count === 1 ? "1 note corrigée" : `${count} notes corrigées`;
+  editUi.undo.disabled = state.history.length === 0;
+}
+
+function showEditStatus(text, isError = false) {
+  editUi.status.textContent = text;
+  editUi.status.classList.toggle("is-error", isError);
+}
+
+/** The tile under the mouse. Black-key tiles are drawn on top, so they win. */
+function tileAt(event) {
+  const bounds = canvas.getBoundingClientRect();
+  const x = event.clientX - bounds.left;
+  const y = event.clientY - bounds.top;
+  const inside = ({ rect }) =>
+    x >= rect.x && x <= rect.x + rect.width && y >= rect.y && y <= rect.y + rect.height;
+  const isBlack = ({ note }) => state.layout.get(note.pitch).black;
+  return state.tiles.find((tile) => isBlack(tile) && inside(tile))
+    ?? state.tiles.find((tile) => !isBlack(tile) && inside(tile))
+    ?? null;
+}
+
+function otherHand(hand) {
+  return hand === "left" ? "right" : "left";
+}
+
+/** Move the clicked note (or, with Shift, its whole chord) to the other hand. */
+function correctAt(event) {
+  const tile = tileAt(event);
+  if (!tile) return;
+  const clicked = tile.note;
+  const hand = otherHand(clicked.hand);
+
+  // A chord: the notes that start with the clicked one and share its hand.
+  const notes = event.shiftKey
+    ? state.song.notes.filter((note) =>
+      Math.abs(note.start - clicked.start) <= CHORD_WINDOW && note.hand === clicked.hand)
+    : [clicked];
+
+  state.history.push(notes.map((note) => ({ note, hand: note.hand })));
+  for (const note of notes) note.hand = hand;
+  afterCorrection();
+}
+
+function undoCorrection() {
+  const last = state.history.pop();
+  if (!last) return;
+  for (const { note, hand } of last) note.hand = hand;
+  afterCorrection();
+}
+
+function afterCorrection() {
+  updateEditBar();
+  scheduleSave();
+}
+
+/** Send the corrections a moment after the last click, not after every click. */
+function scheduleSave() {
+  clearTimeout(state.saveTimer);
+  showEditStatus("Modifications non enregistrées…");
+  const songId = state.currentId;
+  const corrections = correctedNotes().map(({ pitch, start, hand }) => ({ pitch, start, hand }));
+  state.saveTimer = setTimeout(() => saveCorrections(songId, corrections), SAVE_DELAY);
+  state.pendingSave = () => saveCorrections(songId, corrections);
+}
+
+/** Save right away if a save is waiting (before switching songs). */
+function flushCorrections() {
+  if (!state.pendingSave) return;
+  clearTimeout(state.saveTimer);
+  state.pendingSave();
+}
+
+async function saveCorrections(songId, corrections) {
+  state.pendingSave = null;
+  try {
+    const response = await fetch(`${API_SONGS}/${songId}/corrections`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(corrections),
+    });
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    if (songId === state.currentId) showEditStatus("Enregistré");
+  } catch (error) {
+    if (songId === state.currentId) showEditStatus("L'enregistrement a échoué. Réessayez.", true);
+    console.error(error);
+  }
+}
+
+function connectCorrections() {
+  editUi.toggle.addEventListener("click", () => setEditing(!state.editing));
+  editUi.undo.addEventListener("click", undoCorrection);
+
+  canvas.addEventListener("pointermove", (event) => {
+    if (!state.editing) return;
+    state.hovered = tileAt(event)?.note ?? null;
+    canvas.style.cursor = state.hovered ? "pointer" : "default";
+  });
+  canvas.addEventListener("pointerleave", () => { state.hovered = null; });
+
+  // In edit mode, the mouse wheel moves through the song.
+  canvas.addEventListener("wheel", (event) => {
+    if (!state.editing) return;
+    event.preventDefault();
+    seekTo(state.audio.currentTime + event.deltaY * SCRUB_SPEED);
+  }, { passive: false });
+
+  // Last chance to save when the page is closed.
+  window.addEventListener("pagehide", flushCorrections);
 }
 
 // ---------------------------------------------------------------------------
@@ -806,6 +1003,7 @@ async function openSong(info) {
     const response = await fetch(`${base}/song.json`);
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const song = await response.json();
+    flushCorrections(); // the previous song may still have unsaved corrections
 
     for (const player of Object.values(players)) player.pause();
     state.song = song;
@@ -814,6 +1012,10 @@ async function openSong(info) {
     state.sparks = [];
     players.mix.src = `${base}/mix.mp3`;
     players.piano.src = `${base}/piano.mp3`;
+
+    setEditing(false);
+    await applySavedCorrections(info.id, song.notes);
+    state.history = [];
 
     document.getElementById("title").textContent = song.title;
     document.getElementById("details").textContent =
@@ -827,6 +1029,7 @@ async function openSong(info) {
 }
 
 function closeSong() {
+  setEditing(false);
   for (const player of Object.values(players)) {
     player.pause();
     player.removeAttribute("src");
@@ -936,6 +1139,7 @@ function main() {
   window.addEventListener("resize", resizeCanvas);
   connectControls();
   connectLibrary();
+  connectCorrections();
   setSpeed(1);
   requestAnimationFrame(drawFrame);
   refreshLibrary();

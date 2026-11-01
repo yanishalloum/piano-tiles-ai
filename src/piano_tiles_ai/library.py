@@ -35,6 +35,19 @@ _SONG_ID = re.compile(r"[0-9a-f]{16}")
 
 
 @dataclass(frozen=True)
+class HandCorrection:
+    """A note moved to the other hand by the user.
+
+    The note is identified by its pitch and start time (rounded to the
+    millisecond, as in song.json), not by its position in the list.
+    """
+
+    pitch: int
+    start: float
+    hand: Literal["left", "right"]
+
+
+@dataclass(frozen=True)
 class SongInfo:
     """What the library knows about one song."""
 
@@ -101,13 +114,16 @@ class Library:
 
     # --- Writing -------------------------------------------------------------
 
-    def _write_info(self, info: SongInfo) -> None:
-        """Write info.json atomically: readers never see a half-written file."""
-        folder = self.folder(info.id)
-        temporary = folder / "info.json.tmp"
+    @staticmethod
+    def _write_json(path: Path, data) -> None:
+        """Write a JSON file atomically: readers never see a half-written file."""
+        temporary = path.with_name(path.name + ".tmp")
         with open(temporary, "w", encoding="utf-8") as f:
-            json.dump(asdict(info), f, ensure_ascii=False)
-        os.replace(temporary, folder / "info.json")
+            json.dump(data, f, ensure_ascii=False)
+        os.replace(temporary, path)
+
+    def _write_info(self, info: SongInfo) -> None:
+        self._write_json(self.folder(info.id) / "info.json", asdict(info))
 
     def add(self, source: str | Path, title: str) -> SongInfo:
         """Copy an audio file into the library and register it as queued.
@@ -151,6 +167,25 @@ class Library:
             self._write_info(info)
             return info
 
+    def corrections(self, song_id: str) -> list[HandCorrection]:
+        """Hand corrections made by the user (empty if there are none)."""
+        path = self.folder(song_id) / "corrections.json"
+        if not path.is_file():
+            return []
+        with open(path, encoding="utf-8") as f:
+            data = json.load(f)
+        return [HandCorrection(**item) for item in data["corrections"]]
+
+    def save_corrections(self, song_id: str, corrections: list[HandCorrection]) -> None:
+        """Replace the hand corrections of a song.
+
+        They are stored apart from song.json, so the model's own predictions
+        are kept: we can always compare them with the user's corrections.
+        """
+        data = {"format_version": 1, "corrections": [asdict(c) for c in corrections]}
+        with self._lock:
+            self._write_json(self.folder(song_id) / "corrections.json", data)
+
     def delete(self, song_id: str) -> bool:
         """Delete a song and all its files. Returns False if it did not exist."""
         with self._lock:
@@ -176,14 +211,16 @@ def process_library_song(
     Returns:
         The final information of the song, with status "ready" or "error".
     """
-    if process is None:
-        from piano_tiles_ai.pipeline import process_song as process
-    if separate is None:
-        from piano_tiles_ai.separation import separate_piano as separate
-
     info = library.set_status(song_id, "processing")
     folder = library.folder(song_id)
     try:
+        # Imported here, inside the try: if loading the models fails, the song
+        # is marked as failed instead of staying "processing" forever.
+        if process is None:
+            from piano_tiles_ai.pipeline import process_song as process
+        if separate is None:
+            from piano_tiles_ai.separation import separate_piano as separate
+
         original = library.original(song_id)
         notes = process(original)
         save_song_json(notes, folder / "song.json", info.title)

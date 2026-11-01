@@ -11,17 +11,37 @@ import tempfile
 from concurrent.futures import Executor, ThreadPoolExecutor
 from pathlib import Path
 
+from typing import Literal
+
 from fastapi import FastAPI, Form, HTTPException, UploadFile
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
+from pydantic import BaseModel, Field
 
-from piano_tiles_ai.library import ALLOWED_SUFFIXES, Library, SongInfo, process_library_song
+from piano_tiles_ai.library import (
+    ALLOWED_SUFFIXES,
+    HandCorrection,
+    Library,
+    SongInfo,
+    process_library_song,
+)
 from piano_tiles_ai.paths import PROJECT_ROOT
 
 WEB_DIR = PROJECT_ROOT / "web"
 MAX_UPLOAD_BYTES = 200 * 1024 * 1024  # 200 MB
 SONG_FILES = {"song.json", "mix.mp3", "piano.mp3"}
 CHUNK_SIZE = 1024 * 1024
+
+
+class CorrectionIn(BaseModel):
+    """One hand correction sent by the page. Pydantic rejects invalid values."""
+
+    pitch: int = Field(ge=21, le=108)
+    start: float = Field(ge=0)
+    hand: Literal["left", "right"]
+
+
+MAX_CORRECTIONS = 50_000
 
 
 def create_app(
@@ -120,6 +140,25 @@ def create_app(
         if name not in SONG_FILES or info.status != "ready":
             raise HTTPException(status_code=404, detail="Fichier introuvable")
         return FileResponse(library.folder(song_id) / name)
+
+    @app.get("/api/songs/{song_id}/corrections")
+    def get_corrections(song_id: str) -> list[HandCorrection]:
+        """Notes the user moved to the other hand."""
+        info_or_404(song_id)
+        return library.corrections(song_id)
+
+    @app.put("/api/songs/{song_id}/corrections", status_code=204)
+    def put_corrections(song_id: str, corrections: list[CorrectionIn]) -> None:
+        """Replace all the hand corrections of a song."""
+        info = info_or_404(song_id)
+        if info.status != "ready":
+            raise HTTPException(status_code=409, detail="Le morceau n'est pas encore prêt")
+        if len(corrections) > MAX_CORRECTIONS:
+            raise HTTPException(status_code=413, detail="Trop de corrections")
+        library.save_corrections(
+            song_id,
+            [HandCorrection(pitch=c.pitch, start=round(c.start, 3), hand=c.hand) for c in corrections],
+        )
 
     # Everything else is the visualizer itself. Mounted last: API routes come first.
     app.mount("/", StaticFiles(directory=web_dir, html=True), name="web")

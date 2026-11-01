@@ -103,3 +103,36 @@ def test_delete_removes_the_song(library, song_file):
     assert library.delete(song_id)
     assert library.get(song_id) is None
     assert not library.delete(song_id)
+
+
+def test_model_loading_errors_are_reported(library, song_file, monkeypatch):
+    import builtins
+
+    real_import = builtins.__import__
+
+    def failing_import(name, *args, **kwargs):
+        if name == "piano_tiles_ai.pipeline":
+            raise ImportError("torch is broken")
+        return real_import(name, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "__import__", failing_import)
+    song_id = library.add(song_file, "Song").id
+    info = process_library_song(library, song_id, separate=fake_separate, encode=fake_encode)
+    assert info.status == "error"
+    assert "torch is broken" in info.error
+
+
+def test_corrections_are_empty_by_default(library, song_file):
+    song_id = library.add(song_file, "Song").id
+    assert library.corrections(song_id) == []
+
+
+def test_corrections_are_saved_and_read_back(library, song_file):
+    from piano_tiles_ai.library import HandCorrection
+
+    song_id = library.add(song_file, "Song").id
+    corrections = [HandCorrection(pitch=60, start=1.25, hand="left")]
+    library.save_corrections(song_id, corrections)
+    assert library.corrections(song_id) == corrections
+    library.save_corrections(song_id, [])
+    assert library.corrections(song_id) == []
