@@ -53,11 +53,13 @@ def augment_piece(
         if rng.random() < drop_probability:
             continue
         start = max(0.0, n.start * tempo + rng.uniform(-onset_jitter, onset_jitter))
-        augmented.append(replace(
-            n,
-            pitch=n.pitch + transpose,
-            start=start,
-            end=start + n.duration * tempo,
-            velocity=min(127, max(1, n.velocity + shift)),
-        ))
+        augmented.append(
+            replace(
+                n,
+                pitch=n.pitch + transpose,
+                start=start,
+                end=start + n.duration * tempo,
+                velocity=min(127, max(1, n.velocity + shift)),
+            )
+        )
     return sorted(augmented, key=lambda note: (note.start, note.pitch))

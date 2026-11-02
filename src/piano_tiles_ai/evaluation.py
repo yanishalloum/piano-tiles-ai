@@ -2,9 +2,9 @@
 
 from dataclasses import dataclass
 
+from piano_tiles_ai.hand_data import strip_hands
 from piano_tiles_ai.notes import Note
 
-from piano_tiles_ai.hand_data import strip_hands
 
 @dataclass(frozen=True)
 class HandScores:
@@ -34,11 +34,11 @@ def score_hands(predicted: list[Note], reference: list[Note]) -> HandScores:
     """
     if len(predicted) != len(reference):
         raise ValueError(f"{len(predicted)} predicted notes but {len(reference)} reference notes")
-    for p, r in zip(predicted, reference):
+    for p, r in zip(predicted, reference, strict=True):
         if (p.pitch, p.start) != (r.pitch, r.start):
             raise ValueError("Predicted and reference notes do not match")
 
-    pairs = [(p.hand, r.hand) for p, r in zip(predicted, reference)]
+    pairs = [(p.hand, r.hand) for p, r in zip(predicted, reference, strict=True)]
 
     def count(pred: str, true: str) -> int:
         return sum(p == pred and r == true for p, r in pairs)
@@ -56,6 +56,7 @@ def score_hands(predicted: list[Note], reference: list[Note]) -> HandScores:
         right_precision=_safe_div(right_right, right_right + right_left),
         right_recall=_safe_div(right_right, right_right + left_right),
     )
+
 
 def evaluate_method(method, pieces: list[list[Note]]) -> HandScores:
     """Score a hand assignment method on several pieces at once (micro-average).

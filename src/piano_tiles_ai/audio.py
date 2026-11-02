@@ -1,14 +1,17 @@
 """Audio loading utilities"""
+
 from pathlib import Path
-import librosa 
+
+import librosa
 import numpy as np
 
+
 def load_audio(
-path:str | Path,
-sr:int | None = None,
-mono:bool = True,
-offset:float = 0.0,
-duration:float | None = None,
+    path: str | Path,
+    sr: int | None = None,
+    mono: bool = True,
+    offset: float = 0.0,
+    duration: float | None = None,
 ) -> tuple[np.ndarray, int]:
     """Load an audio file as a floating-point waveform.
 

@@ -2,11 +2,12 @@
 
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Literal
 
 import pretty_midi
 
-from typing import Literal
 Hand = Literal["left", "right"]
+
 
 @dataclass(frozen=True)
 class Note:
@@ -56,6 +57,7 @@ def load_notes(path: str | Path) -> list[Note]:
         for n in instrument.notes
     ]
     return sorted(notes, key=lambda note: (note.start, note.pitch))
+
 
 TRACK_NAMES = {"right": "Piano right", "left": "Piano left", None: "Piano"}
 

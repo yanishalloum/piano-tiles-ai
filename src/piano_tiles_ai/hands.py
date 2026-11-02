@@ -1,11 +1,10 @@
 """Assign each note to the left or right hand."""
 
+from bisect import bisect_left, bisect_right
 from dataclasses import replace
+from statistics import mean
 
 from piano_tiles_ai.notes import Note
-
-from bisect import bisect_left, bisect_right
-from statistics import mean
 
 MIDDLE_C = 60
 
@@ -21,6 +20,7 @@ def assign_hands_by_split(notes: list[Note], split: int = MIDDLE_C) -> list[Note
         New Note objects with their `hand` field set.
     """
     return [replace(n, hand="left" if n.pitch < split else "right") for n in notes]
+
 
 def _two_means_split(pitches: list[int], min_spread: int, n_iter: int = 20) -> float:
     """Return the boundary between a low and a high group of pitches.

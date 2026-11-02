@@ -19,13 +19,15 @@ def make_piece(n_notes):
     notes = []
     for i in range(n_notes):
         left = i % 2 == 0
-        notes.append(Note(
-            pitch=40 + i % 7 if left else 76 + i % 5,
-            start=i * 0.25,
-            end=i * 0.25 + 0.2,
-            velocity=64,
-            hand="left" if left else "right",
-        ))
+        notes.append(
+            Note(
+                pitch=40 + i % 7 if left else 76 + i % 5,
+                start=i * 0.25,
+                end=i * 0.25 + 0.2,
+                velocity=64,
+                hand="left" if left else "right",
+            )
+        )
     return notes
 
 
@@ -57,6 +59,7 @@ def test_training_learns_a_trivial_task():
     model, history = train_hand_model(pieces, pieces[:1], epochs=40, learning_rate=1e-2, device="cpu")
     assert max(h["val_accuracy"] for h in history) > 0.95
 
+
 def test_transformer_output_shape():
     model = HandTransformer(d_model=16, nhead=2, num_layers=1, dim_feedforward=32)
     assert model(torch.zeros(2, CHUNK_SIZE, 4)).shape == (2, CHUNK_SIZE)
@@ -73,8 +76,11 @@ def test_transformer_labels_pieces_longer_than_a_chunk():
 def test_transformer_learns_a_trivial_task():
     pieces = [make_piece(512) for _ in range(4)]
     model = HandTransformer(d_model=16, nhead=2, num_layers=1, dim_feedforward=32)
-    _, history = train_hand_model(pieces, pieces[:1], model=model, epochs=40, learning_rate=1e-2, device="cpu")
+    _, history = train_hand_model(
+        pieces, pieces[:1], model=model, epochs=40, learning_rate=1e-2, device="cpu"
+    )
     assert max(h["val_accuracy"] for h in history) > 0.95
+
 
 def test_saved_model_can_be_loaded(tmp_path):
     model = HandLSTM().eval()
@@ -83,6 +89,7 @@ def test_saved_model_can_be_loaded(tmp_path):
     loaded = load_hand_model(path, device="cpu")
     x = torch.zeros(1, 5, 4)
     assert torch.allclose(model(x), loaded(x))
+
 
 def test_training_with_augmentation_runs():
     pieces = [make_piece(512) for _ in range(2)]

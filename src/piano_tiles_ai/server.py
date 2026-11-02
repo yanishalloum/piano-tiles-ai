@@ -10,7 +10,6 @@ then open http://localhost:8765. The API is documented at /docs.
 import tempfile
 from concurrent.futures import Executor, ThreadPoolExecutor
 from pathlib import Path
-
 from typing import Literal
 
 from fastapi import FastAPI, Form, HTTPException, UploadFile
@@ -114,7 +113,9 @@ def create_app(
         suffix = Path(filename).suffix.lower()
         if suffix not in ALLOWED_SUFFIXES:
             allowed = ", ".join(sorted(ALLOWED_SUFFIXES))
-            raise HTTPException(status_code=415, detail=f"Format non pris en charge. Formats acceptés : {allowed}")
+            raise HTTPException(
+                status_code=415, detail=f"Format non pris en charge. Formats acceptés : {allowed}"
+            )
 
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / f"upload{suffix}"
@@ -123,7 +124,9 @@ def create_app(
                 while chunk := file.file.read(CHUNK_SIZE):
                     size += len(chunk)
                     if size > MAX_UPLOAD_BYTES:
-                        raise HTTPException(status_code=413, detail="Fichier trop volumineux (200 Mo maximum)")
+                        raise HTTPException(
+                            status_code=413, detail="Fichier trop volumineux (200 Mo maximum)"
+                        )
                     out.write(chunk)
 
             known = {song.id for song in library.songs()}
@@ -187,4 +190,3 @@ def serve(host: str = "127.0.0.1", port: int = 8765) -> None:
     import uvicorn
 
     uvicorn.run(create_app(), host=host, port=port)
-

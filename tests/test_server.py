@@ -103,7 +103,9 @@ def test_crashes_in_the_background_are_reported(library, tmp_path):
     def crashing_process(library, song_id):
         raise RuntimeError("GPU out of memory")
 
-    app = create_app(library=library, process=crashing_process, executor=ImmediateExecutor(), web_dir=tmp_path)
+    app = create_app(
+        library=library, process=crashing_process, executor=ImmediateExecutor(), web_dir=tmp_path
+    )
     song = upload(TestClient(app)).json()
     info = library.get(song["id"])
     assert info.status == "error"
@@ -128,7 +130,9 @@ def test_invalid_corrections_are_rejected(client):
 
 
 def test_corrections_need_a_ready_song(library, tmp_path):
-    app = create_app(library=library, process=lambda lib, song_id: None, executor=ImmediateExecutor(), web_dir=tmp_path)
+    app = create_app(
+        library=library, process=lambda lib, song_id: None, executor=ImmediateExecutor(), web_dir=tmp_path
+    )
     test_client = TestClient(app)
     song_id = upload(test_client).json()["id"]
     response = test_client.put(f"/api/songs/{song_id}/corrections", json=[])

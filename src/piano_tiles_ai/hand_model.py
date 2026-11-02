@@ -1,20 +1,5 @@
 """Neural networks that assign each note to the left or right hand."""
 
-from dataclasses import replace
-
-import numpy as np
-import torch
-from torch import nn
-from torch.utils.data import DataLoader, Dataset
-
-from piano_tiles_ai.evaluation import evaluate_method
-from piano_tiles_ai.hand_features import N_FEATURES, hand_labels, note_features
-from piano_tiles_ai.notes import Note
-
-from pathlib import Path
-
-"""Neural networks that assign each note to the left or right hand."""
-
 import random
 from dataclasses import replace
 from pathlib import Path
@@ -42,8 +27,8 @@ class HandChunks(Dataset):
             features = note_features(piece)
             labels = hand_labels(piece)
             for start in range(0, len(piece) - chunk_size + 1, stride):
-                self.inputs.append(features[start:start + chunk_size])
-                self.targets.append(labels[start:start + chunk_size])
+                self.inputs.append(features[start : start + chunk_size])
+                self.targets.append(labels[start : start + chunk_size])
 
     def __len__(self) -> int:
         return len(self.inputs)
@@ -127,15 +112,15 @@ def _predict_probabilities(features: np.ndarray, model: nn.Module) -> np.ndarray
     if starts[-1] != n_notes - chunk_size:
         starts.append(n_notes - chunk_size)
 
-    windows = np.stack([features[s:s + chunk_size] for s in starts])
+    windows = np.stack([features[s : s + chunk_size] for s in starts])
     x = torch.from_numpy(windows).to(device)
     window_probabilities = torch.sigmoid(model(x)).cpu().numpy()
 
     totals = np.zeros(n_notes, dtype=np.float32)
     counts = np.zeros(n_notes, dtype=np.float32)
-    for start, probabilities in zip(starts, window_probabilities):
-        totals[start:start + chunk_size] += probabilities
-        counts[start:start + chunk_size] += 1
+    for start, probabilities in zip(starts, window_probabilities, strict=True):
+        totals[start : start + chunk_size] += probabilities
+        counts[start : start + chunk_size] += 1
     return totals / counts
 
 
@@ -154,7 +139,9 @@ def assign_hands_with_model(notes: list[Note], model: nn.Module) -> list[Note]:
     model.eval()
     with torch.no_grad():
         probabilities = _predict_probabilities(note_features(notes), model)
-    return [replace(n, hand="right" if p >= 0.5 else "left") for n, p in zip(notes, probabilities)]
+    return [
+        replace(n, hand="right" if p >= 0.5 else "left") for n, p in zip(notes, probabilities, strict=True)
+    ]
 
 
 def train_hand_model(
@@ -189,11 +176,7 @@ def train_hand_model(
 
     if augment_copies:
         rng = random.Random(seed)
-        augmented = [
-            augment_piece(piece, rng)
-            for piece in train_pieces
-            for _ in range(augment_copies)
-        ]
+        augmented = [augment_piece(piece, rng) for piece in train_pieces for _ in range(augment_copies)]
         train_pieces = train_pieces + augmented
 
     model = model.to(device)
@@ -228,6 +211,7 @@ def train_hand_model(
 
     model.load_state_dict(best_state)
     return model, history
+
 
 def load_hand_model(path: str | Path, device: str | None = None) -> HandLSTM:
     """Load a trained HandLSTM from a state dict file, ready for inference."""

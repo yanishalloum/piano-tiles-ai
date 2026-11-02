@@ -31,6 +31,7 @@ def song_to_dict(notes: list[Note], title: str) -> dict:
         ],
     }
 
+
 def save_song_json(notes: list[Note], path: str | Path, title: str) -> Path:
     """Write a song to a JSON file for the web visualizer.
 

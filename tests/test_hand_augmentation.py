@@ -25,7 +25,7 @@ def no_noise(notes, rng, **kwargs):
 def test_hands_are_kept_with_a_uniform_transposition():
     piece = make_piece()
     augmented = no_noise(piece, random.Random(1))
-    shifts = {a.pitch - o.pitch for a, o in zip(augmented, piece)}
+    shifts = {a.pitch - o.pitch for a, o in zip(augmented, piece, strict=True)}
     assert len(shifts) == 1
     assert [a.hand for a in augmented] == [o.hand for o in piece]
 
@@ -33,7 +33,7 @@ def test_hands_are_kept_with_a_uniform_transposition():
 def test_tempo_scales_durations_uniformly():
     piece = make_piece()
     augmented = no_noise(piece, random.Random(2))
-    ratios = {round(a.duration / o.duration, 6) for a, o in zip(augmented, piece)}
+    ratios = {round(a.duration / o.duration, 6) for a, o in zip(augmented, piece, strict=True)}
     assert len(ratios) == 1
     assert 0.8 <= ratios.pop() <= 1.25
 

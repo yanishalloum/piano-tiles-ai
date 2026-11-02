@@ -21,7 +21,7 @@ import shutil
 import subprocess
 import threading
 from dataclasses import asdict, dataclass, replace
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Literal
 
@@ -83,9 +83,9 @@ def download_audio(url: str, folder: Path) -> tuple[Path, str | None]:
     from yt_dlp import YoutubeDL  # imported here: only needed for links
 
     options = {
-        "format": "bestaudio/best",              # the audio track alone when the site offers it
+        "format": "bestaudio/best",  # the audio track alone when the site offers it
         "outtmpl": str(folder / "original.%(ext)s"),
-        "noplaylist": True,                      # a link inside a playlist: only this video
+        "noplaylist": True,  # a link inside a playlist: only this video
         "max_filesize": MAX_DOWNLOAD_BYTES,
         "quiet": True,
         "no_warnings": True,
@@ -197,7 +197,7 @@ class Library:
                 id=song_id,
                 title=title.strip() or source.stem,
                 status="queued",
-                created_at=datetime.now(timezone.utc).isoformat(),
+                created_at=datetime.now(UTC).isoformat(),
             )
             self._write_info(info)
             return info
@@ -218,7 +218,7 @@ class Library:
                 id=song_id,
                 title=title.strip() or url,
                 status="queued",
-                created_at=datetime.now(timezone.utc).isoformat(),
+                created_at=datetime.now(UTC).isoformat(),
                 source_url=url,
             )
             self._write_info(info)

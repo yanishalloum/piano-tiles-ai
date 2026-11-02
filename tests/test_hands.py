@@ -44,7 +44,12 @@ def test_clustering_separates_two_clear_groups():
     notes = [make_timed_note(p, i * 0.1) for i, p in enumerate([40, 72, 43, 76, 47, 79])]
     result = assign_hands_by_clustering(notes)
     assert {n.pitch: n.hand for n in result} == {
-        40: "left", 43: "left", 47: "left", 72: "right", 76: "right", 79: "right"
+        40: "left",
+        43: "left",
+        47: "left",
+        72: "right",
+        76: "right",
+        79: "right",
     }
 
 

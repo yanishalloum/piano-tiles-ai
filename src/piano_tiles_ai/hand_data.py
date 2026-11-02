@@ -1,16 +1,16 @@
 """Load MIDI files whose tracks are labeled by hand, to evaluate and train hand assignment."""
 
+import hashlib
 from dataclasses import replace
 from pathlib import Path
+from typing import Literal
 
 import pretty_midi
 
 from piano_tiles_ai.notes import Hand, Note
 
-import hashlib
-from typing import Literal
-
 Split = Literal["train", "val", "test"]
+
 
 def _hand_from_track_name(name: str) -> Hand | None:
     """Return the hand named in a track name, or None if it names neither."""
@@ -69,6 +69,7 @@ def strip_hands(notes: list[Note]) -> list[Note]:
     """Return copies of the notes with their hand removed."""
     return [replace(n, hand=None) for n in notes]
 
+
 def split_for(path: str | Path, val_fraction: float = 0.15, test_fraction: float = 0.15) -> Split:
     """Return the dataset split ("train", "val" or "test") of a file.
 
@@ -87,6 +88,7 @@ def split_for(path: str | Path, val_fraction: float = 0.15, test_fraction: float
     if position < test_fraction + val_fraction:
         return "val"
     return "train"
+
 
 def load_split(data_dir: str | Path, split: Split) -> list[list[Note]]:
     """Load every usable hand-labeled piece of one split.

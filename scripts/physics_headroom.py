@@ -46,7 +46,7 @@ def main() -> None:
         predicted = sorted(assign_hands_with_model(strip_hands(reference), model), key=sort_key)
         assert len(predicted) == len(reference), "the model changed the number of notes"
 
-        wrong = {i for i, (p, r) in enumerate(zip(predicted, reference)) if p.hand != r.hand}
+        wrong = {i for i, (p, r) in enumerate(zip(predicted, reference, strict=True)) if p.hand != r.hand}
         total += len(reference)
         errors += len(wrong)
 
@@ -64,13 +64,16 @@ def main() -> None:
         in_truth["au moins une"] += len(all_truth)
 
     print(f"{total} notes, {errors} erreurs du LSTM, accuracy {percent(total - errors, total)}\n")
-    print(f"{'règle':<14}{'vraies mains':>14}{'erreurs repérées':>18}{'repérées = erreur':>19}{'accuracy max':>14}")
+    print(
+        f"{'règle':<14}{'vraies mains':>14}{'erreurs repérées':>18}"
+        f"{'repérées = erreur':>19}{'accuracy max':>14}"
+    )
     for name in caught:
         print(
             f"{name:<14}"
-            f"{percent(in_truth[name], total):>14}"           # rule broken by real pianists?
-            f"{percent(caught[name], errors):>18}"            # share of the errors it finds
-            f"{percent(caught[name], flagged[name]):>19}"     # how often a flagged note is wrong
+            f"{percent(in_truth[name], total):>14}"  # rule broken by real pianists?
+            f"{percent(caught[name], errors):>18}"  # share of the errors it finds
+            f"{percent(caught[name], flagged[name]):>19}"  # how often a flagged note is wrong
             f"{percent(total - errors + caught[name], total):>14}"  # if every found error were fixed
         )
 

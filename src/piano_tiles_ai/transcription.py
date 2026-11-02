@@ -7,11 +7,11 @@ import tempfile
 from pathlib import Path
 
 from piano_tiles_ai.cache import file_hash
-
 from piano_tiles_ai.paths import OUTPUTS_DIR
 
 MODEL_NAME = "transkun-2.0.1"
 DEFAULT_CACHE_DIR = OUTPUTS_DIR / "transcribed"
+
 
 def _default_device() -> str:
     """Return "cuda" if an NVIDIA GPU is available, otherwise "cpu"."""

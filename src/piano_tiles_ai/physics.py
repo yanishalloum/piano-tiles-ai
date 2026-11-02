@@ -17,11 +17,11 @@ from collections.abc import Iterable
 
 from piano_tiles_ai.notes import Note
 
-CHORD_WINDOW = 0.03      # s: notes starting this close together form a chord
-MAX_NOTES_PER_HAND = 5   # five fingers
-MAX_CHORD_SPAN = 16      # semitones: a tenth, reachable by large hands
-MAX_JUMP = 24            # semitones: two octaves
-MIN_JUMP_TIME = 0.12     # s: below this, a jump larger than MAX_JUMP is impossible
+CHORD_WINDOW = 0.03  # s: notes starting this close together form a chord
+MAX_NOTES_PER_HAND = 5  # five fingers
+MAX_CHORD_SPAN = 16  # semitones: a tenth, reachable by large hands
+MAX_JUMP = 24  # semitones: two octaves
+MIN_JUMP_TIME = 0.12  # s: below this, a jump larger than MAX_JUMP is impossible
 
 
 def chord_groups(notes: list[Note]) -> list[list[int]]:

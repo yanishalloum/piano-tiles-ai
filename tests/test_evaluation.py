@@ -1,15 +1,18 @@
 """Tests for piano_tiles_ai.evaluation."""
 
-import pytest
-
-from piano_tiles_ai.evaluation import score_hands
-from piano_tiles_ai.notes import Note
-
 from dataclasses import replace
 
+import pytest
+
+from piano_tiles_ai.evaluation import evaluate_method, score_hands
+from piano_tiles_ai.notes import Note
+
+
 def make_notes(hands):
-    return [Note(pitch=60 + i, start=float(i), end=float(i) + 0.5, velocity=80, hand=h)
-            for i, h in enumerate(hands)]
+    return [
+        Note(pitch=60 + i, start=float(i), end=float(i) + 0.5, velocity=80, hand=h)
+        for i, h in enumerate(hands)
+    ]
 
 
 def test_scores_match_hand_computation():
@@ -31,8 +34,6 @@ def test_perfect_prediction():
 def test_mismatched_notes_raise():
     with pytest.raises(ValueError):
         score_hands(make_notes(["left"]), make_notes(["left", "right"]))
-
-from piano_tiles_ai.evaluation import evaluate_method, score_hands
 
 
 def test_evaluate_method_hides_reference_hands():

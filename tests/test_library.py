@@ -162,8 +162,13 @@ def test_links_are_downloaded_then_processed(library):
         target.write_bytes(b"flac")
 
     info = process_library_song(
-        library, song_id, process=fake_process, separate=fake_separate,
-        encode=fake_encode, download=fake_download, extract=fake_extract,
+        library,
+        song_id,
+        process=fake_process,
+        separate=fake_separate,
+        encode=fake_encode,
+        download=fake_download,
+        extract=fake_extract,
     )
     assert info.status == "ready"
     assert info.title == "Video Title"  # the title of the video replaces the link
@@ -173,8 +178,13 @@ def test_links_are_downloaded_then_processed(library):
 def test_a_title_given_by_the_user_is_kept(library):
     song_id = library.add_url("https://youtu.be/abc", "Mon titre").id
     info = process_library_song(
-        library, song_id, process=fake_process, separate=fake_separate,
-        encode=fake_encode, download=fake_download, extract=lambda video, target: target.write_bytes(b""),
+        library,
+        song_id,
+        process=fake_process,
+        separate=fake_separate,
+        encode=fake_encode,
+        download=fake_download,
+        extract=lambda video, target: target.write_bytes(b""),
     )
     assert info.title == "Mon titre"
 
@@ -203,8 +213,12 @@ def test_the_sound_of_a_video_is_extracted(library, tmp_path):
         return fake_process(path)
 
     info = process_library_song(
-        library, song_id, process=recording_process, separate=fake_separate,
-        encode=fake_encode, extract=fake_extract,
+        library,
+        song_id,
+        process=recording_process,
+        separate=fake_separate,
+        encode=fake_encode,
+        extract=fake_extract,
     )
     assert info.status == "ready"
     assert seen == ["audio.flac"]
