@@ -12,7 +12,7 @@
 
 Drop a song (an audio or video file, or a YouTube or TikTok link) and Piano Tiles AI
 **isolates the piano, writes down every note, decides which hand plays it**, and shows
-the result as falling tiles you can watch, correct and practise with your own piano.
+the result as falling tiles you can watch, correct and practice with your own piano.
 
 <p align="center">
   <img src="docs/assets/demo.gif" alt="The visualizer playing Bach's Prelude in C major" width="90%">
