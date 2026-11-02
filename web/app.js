@@ -53,7 +53,13 @@ const SCRUB_SPEED = 0.004;  // s of music per pixel of mouse wheel, in edit mode
 
 // Practice mode: the song waits until you play the right notes.
 const PRACTICE_LEAD = 0.05;    // s: stop this much before a chord, so the recording never plays it
-const ONSET_THRESHOLD = 0.5;   // Basic Pitch probability above which a note counts as struck
+// Basic Pitch probability above which a note counts as struck. The model is
+// less sure of itself on low notes (weak fundamental, slower attack): measured
+// on a rendered piano, 0.4 below C3 recognizes 97 % of the chords instead of
+// 87.5 %, and still accepts no chord played a semitone off.
+const ONSET_THRESHOLD = 0.5;
+const ONSET_THRESHOLD_LOW = 0.4;
+const LOW_NOTES_BELOW = 48;    // C3
 const EARLY_WINDOW = 400;      // ms: notes struck this long before the wait still count
 const GRACE = 300;             // ms the song keeps going while the microphone answers
 const REFRACTORY = 150;        // ms: a second onset of the same key this soon is the same strike
@@ -1080,7 +1086,7 @@ function handleHeardNotes(struck, sounding, now, duration) {
   practice.slow = practice.analysisTime > SLOW_ANALYSIS;
   practice.recent = practice.recent.filter(({ time }) => now - time <= EARLY_WINDOW);
   for (const [pitch, probability] of struck) {
-    if (probability < ONSET_THRESHOLD) continue;
+    if (probability < (pitch < LOW_NOTES_BELOW ? ONSET_THRESHOLD_LOW : ONSET_THRESHOLD)) continue;
     // Two analyses in a row can see the same strike: count it once.
     if (now - (practice.lastOnset.get(pitch) ?? -Infinity) < REFRACTORY) continue;
     practice.lastOnset.set(pitch, now);
