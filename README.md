@@ -88,6 +88,8 @@ Nakamura et al., 2014) could tell them apart.
 
 ## Getting started
 
+**TUTORIAL** The [step-by-step setup guide](docs/setup.md) gives you all the steps.
+
 Requirements: Linux or WSL 2, an NVIDIA GPU with CUDA 12.6+ (strongly recommended),
 [uv](https://docs.astral.sh/uv/) and FFmpeg.
 
