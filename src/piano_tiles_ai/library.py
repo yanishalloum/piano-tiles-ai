@@ -99,9 +99,9 @@ def download_audio(url: str, folder: Path) -> tuple[Path, str | None]:
     except DownloadError as error:
         # yt-dlp messages start with "ERROR: [site] id:"; keep the readable end.
         reason = str(error).removeprefix("ERROR: ").split(": ", 1)[-1].split("; please report")[0]
-        raise RuntimeError(f"Téléchargement impossible : {reason}") from None
+        raise RuntimeError(f"Download failed: {reason}") from None
     if not path.is_file():
-        raise RuntimeError("Le téléchargement n'a produit aucun fichier (vidéo trop lourde ?)")
+        raise RuntimeError("The download produced no file (video too large?)")
     return path, info.get("title")
 
 

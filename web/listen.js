@@ -63,7 +63,7 @@
    *        of the analysis (performance.now(), in ms) and how long it took (ms).
    * @param {(level: number) => void} [callbacks.onLevel]  Loudness of the microphone, 0 to 1.
    */
-  function createListener({ onNotes, onLevel = () => {}, onBackend = () => {} }) {
+  function createListener({ onNotes, onLevel = () => {}, onBackend = () => {}, workerUrl = "listen-worker.js" }) {
     let context = null;
     let stream = null;
     let worker = null;
@@ -126,7 +126,7 @@
 
     function startWorker() {
       return new Promise((resolve, reject) => {
-        worker = new Worker("listen-worker.js");
+        worker = new Worker(workerUrl);
         worker.onmessage = ({ data }) => {
           if (data.type === "ready") {
             onBackend(data.backend);

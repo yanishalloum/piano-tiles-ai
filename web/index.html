@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="fr">
+<html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -15,73 +15,80 @@
     <header class="masthead">
       <div class="titles">
         <h1 id="title">Piano Tiles AI</h1>
-        <p id="details">Chargement du morceau…</p>
+        <p id="details" data-i18n="loadingSong">Loading the song…</p>
       </div>
       <div class="masthead-side">
         <p class="legend">
-          <span class="swatch swatch-left" aria-hidden="true"></span>Main gauche
-          <span class="swatch swatch-right" aria-hidden="true"></span>Main droite
+          <span class="swatch swatch-left" aria-hidden="true"></span><span data-i18n="leftHand">Left hand</span>
+          <span class="swatch swatch-right" aria-hidden="true"></span><span data-i18n="rightHand">Right hand</span>
         </p>
-        <button id="practice-toggle" class="library-toggle" type="button" aria-pressed="false">
-          S'entraîner
+        <button id="practice-toggle" class="library-toggle" type="button" aria-pressed="false" data-i18n="practice">
+          Practice
         </button>
-        <button id="edit-toggle" class="library-toggle" type="button" aria-pressed="false">
-          Corriger les mains
+        <button id="edit-toggle" class="library-toggle" type="button" aria-pressed="false" data-i18n="correctHands">
+          Correct hands
         </button>
+        <label class="language">
+          <span class="visually-hidden" data-i18n="language">Language</span>
+          <select id="language">
+            <option value="en">EN</option>
+            <option value="fr">FR</option>
+          </select>
+        </label>
         <button id="library-toggle" class="library-toggle" type="button" aria-expanded="false" aria-controls="library">
-          Bibliothèque
+          Library
         </button>
       </div>
     </header>
 
     <div class="stage-wrap">
-      <canvas id="stage" aria-label="Les notes du morceau tombent vers le clavier"></canvas>
+      <canvas id="stage" data-i18n-aria-label="stageLabel" aria-label="The notes of the song fall towards the keyboard"></canvas>
 
       <div id="edit-bar" class="edit-bar" hidden>
-        <p class="edit-help">
-          Cliquez une tuile pour la passer à l'autre main. <kbd>Maj</kbd> + clic&nbsp;: tout l'accord.
-          Molette&nbsp;: avancer ou reculer.
+        <p class="edit-help" data-i18n-html="editHelp">
+          Click a tile to move it to the other hand. <kbd>Shift</kbd> + click: the whole chord.
+          Mouse wheel: move through the song.
         </p>
         <span id="edit-count" class="edit-count"></span>
-        <button id="undo" class="text-button" type="button" title="Ctrl + Z">Annuler</button>
+        <button id="undo" class="text-button" type="button" title="Ctrl + Z" data-i18n="undo">Undo</button>
         <span id="edit-status" class="edit-status" role="status"></span>
       </div>
 
       <div id="practice-bar" class="edit-bar practice-bar" hidden>
         <label class="practice-field">
-          Main
+          <span data-i18n="hand">Hand</span>
           <select id="practice-hand">
-            <option value="both">Les deux</option>
-            <option value="left">Gauche</option>
-            <option value="right">Droite</option>
+            <option value="both" data-i18n="bothHands">Both</option>
+            <option value="left" data-i18n="left">Left</option>
+            <option value="right" data-i18n="right">Right</option>
           </select>
         </label>
-        <span class="mic" title="Niveau du micro">
-          Micro <span id="mic-level" class="mic-level" aria-hidden="true"></span>
+        <span class="mic" title="Microphone level" data-i18n-title="micLevel">
+          <span data-i18n="mic">Mic</span> <span id="mic-level" class="mic-level" aria-hidden="true"></span>
         </span>
-        <label class="practice-field" title="Avec un casque seulement : sinon le micro entend le morceau">
-          <input id="practice-sound" type="checkbox"> Son du morceau
+        <label class="practice-field" title="With headphones only: otherwise the microphone hears the song" data-i18n-title="songSoundHint">
+          <input id="practice-sound" type="checkbox"> <span data-i18n="songSound">Song sound</span>
         </label>
         <span id="practice-status" class="practice-status" role="status"></span>
         <span id="practice-score" class="edit-count"></span>
-        <button id="practice-skip" class="text-button" type="button" title="Entrée">Passer</button>
+        <button id="practice-skip" class="text-button" type="button" title="Enter" data-i18n-title="skipHint" data-i18n="skip">Skip</button>
       </div>
 
-      <aside id="library" class="library" aria-label="Bibliothèque" hidden>
+      <aside id="library" class="library" aria-label="Library" data-i18n-aria-label="library" hidden>
         <div class="library-head">
-          <h2>Bibliothèque</h2>
-          <button id="library-close" class="text-button" type="button">Fermer</button>
+          <h2 data-i18n="library">Library</h2>
+          <button id="library-close" class="text-button" type="button" data-i18n="close">Close</button>
         </div>
         <div class="add-song">
-          <button id="add-song" class="add-button" type="button">Ajouter un morceau</button>
+          <button id="add-song" class="add-button" type="button" data-i18n="addSong">Add a song</button>
           <input id="file-input" class="visually-hidden" type="file" accept=".mp3,.wav,.flac,.ogg,.m4a,.mp4,.mov,.webm,.mkv,audio/*,video/*" tabindex="-1">
-          <p class="hint">ou déposez un fichier audio ou vidéo n'importe où sur la page</p>
+          <p class="hint" data-i18n="dropHint">or drop an audio or video file anywhere on the page</p>
         </div>
         <form id="link-form" class="link-form">
-          <label for="link-input" class="link-label">Depuis un lien</label>
+          <label for="link-input" class="link-label" data-i18n="fromLink">From a link</label>
           <div class="link-row">
             <input id="link-input" type="url" placeholder="YouTube, TikTok…" autocomplete="off" required>
-            <button class="link-button" type="submit">Ajouter</button>
+            <button class="link-button" type="submit" data-i18n="add">Add</button>
           </div>
         </form>
         <p id="library-message" class="library-message" role="status"></p>
@@ -89,24 +96,24 @@
       </aside>
 
       <div id="drop-overlay" class="drop-overlay" hidden>
-        <p>Déposez le fichier pour l'ajouter à la bibliothèque</p>
+        <p data-i18n="dropOverlay">Drop the file to add it to the library</p>
       </div>
     </div>
 
-    <section class="transport" aria-label="Commandes de lecture">
+    <section class="transport" aria-label="Playback controls" data-i18n-aria-label="transport">
       <div class="buttons">
-        <button id="back" class="round" type="button" aria-label="Reculer de 5 secondes">
+        <button id="back" class="round" type="button" aria-label="Back 5 seconds" data-i18n-aria-label="back5">
           <svg viewBox="0 0 24 24" aria-hidden="true">
             <path d="M12 6A7 7 0 1 1 5 13" />
             <path d="M14.5 3.5L12 6l2.5 2.5" />
             <text x="12" y="16.2">5</text>
           </svg>
         </button>
-        <button id="play" class="round play" type="button" aria-label="Lecture" data-playing="false">
+        <button id="play" class="round play" type="button" aria-label="Play" data-playing="false">
           <svg class="icon-play" viewBox="0 0 24 24" aria-hidden="true"><path d="M8.5 5.5l10 6.5-10 6.5z" /></svg>
           <svg class="icon-pause" viewBox="0 0 24 24" aria-hidden="true"><rect x="7" y="5.5" width="3.5" height="13" rx="1" /><rect x="13.5" y="5.5" width="3.5" height="13" rx="1" /></svg>
         </button>
-        <button id="forward" class="round" type="button" aria-label="Avancer de 5 secondes">
+        <button id="forward" class="round" type="button" aria-label="Forward 5 seconds" data-i18n-aria-label="forward5">
           <svg viewBox="0 0 24 24" aria-hidden="true">
             <path d="M12 6A7 7 0 1 0 19 13" />
             <path d="M9.5 3.5L12 6 9.5 8.5" />
@@ -117,34 +124,36 @@
 
       <div class="timeline">
         <span id="clock-now" class="clock">0:00</span>
-        <input id="seek" type="range" min="0" max="0" step="0.01" value="0" aria-label="Position dans le morceau">
+        <input id="seek" type="range" min="0" max="0" step="0.01" value="0" aria-label="Position in the song" data-i18n-aria-label="position">
         <span id="clock-total" class="clock">0:00</span>
       </div>
 
-      <div class="source" role="group" aria-label="Ce qu'on entend">
-        <button type="button" data-source="mix" aria-pressed="true">Morceau</button>
-        <button type="button" data-source="piano" aria-pressed="false">Piano seul</button>
+      <div class="source" role="group" aria-label="What you hear" data-i18n-aria-label="whatYouHear">
+        <button type="button" data-source="mix" aria-pressed="true" data-i18n="fullSong">Full song</button>
+        <button type="button" data-source="piano" aria-pressed="false" data-i18n="pianoOnly">Piano only</button>
       </div>
 
       <label class="setting">
-        Vitesse
+        <span data-i18n="speed">Speed</span>
         <input id="speed" type="range" min="0.5" max="1.5" step="0.05" value="1">
         <output id="speed-value" for="speed">×1</output>
       </label>
 
       <label class="setting">
-        Notes
+        <span data-i18n="notes">Notes</span>
         <select id="names">
-          <option value="none">Masquées</option>
+          <option value="none" data-i18n="hidden">Hidden</option>
           <option value="english">C D E</option>
           <option value="solfege">Do Ré Mi</option>
         </select>
       </label>
+
     </section>
   </main>
 
   <audio id="audio-mix" preload="auto"></audio>
   <audio id="audio-piano" preload="auto"></audio>
+  <script src="i18n.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

@@ -124,6 +124,13 @@ h1 {
   color: var(--brass);
 }
 
+.language select {
+  padding: 5px 8px;
+  border-radius: 999px;
+  font-size: 14px;
+  letter-spacing: 0.04em;
+}
+
 /* --- Stage --------------------------------------------------------------- */
 
 .stage-wrap {

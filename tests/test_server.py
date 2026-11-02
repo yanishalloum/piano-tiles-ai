@@ -149,3 +149,24 @@ def test_links_are_accepted(client):
 def test_only_web_links_are_accepted(client):
     for url in ["file:///etc/passwd", "not a link", "ftp://example.com/song.mp3"]:
         assert client.post("/api/songs/from-url", json={"url": url}).status_code == 422
+
+
+def test_pages_are_checked_again_by_the_browser(client):
+    # Otherwise the browser may keep an old app.js after an update.
+    assert client.get("/").headers["cache-control"] == "no-cache"
+
+
+def test_scripts_get_a_new_address_when_they_change(library, tmp_path):
+    web = tmp_path / "site"
+    web.mkdir()
+    (web / "index.html").write_text('<script src="app.js"></script><img src="logo.png">')
+    (web / "app.js").write_text("console.log(1);")
+    app = create_app(library=library, process=fake_process, executor=ImmediateExecutor(), web_dir=web)
+    test_client = TestClient(app)
+
+    first = test_client.get("/").text
+    assert 'src="app.js?v=' in first
+    assert 'src="logo.png"' in first  # only scripts and stylesheets are versioned
+
+    (web / "app.js").write_text("console.log(2);")
+    assert test_client.get("/").text != first

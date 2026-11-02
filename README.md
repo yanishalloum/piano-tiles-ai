@@ -31,7 +31,7 @@ the result as falling tiles you can watch, correct and practice with your own pi
   chord, Ctrl + Z to undo). Corrections are saved apart from the model's output, so they can
   later become test and training data.
 - **Practice mode**: the song waits until you play the right notes on your piano, heard through
-  the microphone. Practise one hand or both; skip a chord if you are stuck.
+  the microphone. Practice one hand or both; skip a chord if you are stuck.
 
 ## How it works
 

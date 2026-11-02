@@ -123,11 +123,13 @@ function octaveNumber(pitch, convention) {
   return Math.floor(pitch / 12) - (convention === "solfege" ? 2 : 1);
 }
 
+/** The saved note names, or those of the page's language (C D E in English, Do Ré Mi in French). */
 function loadConvention() {
+  const byLanguage = currentLanguage === "fr" ? "solfege" : "english";
   try {
-    return localStorage.getItem("noteNames") ?? "solfege";
+    return localStorage.getItem("noteNames") ?? byLanguage;
   } catch {
-    return "solfege";
+    return byLanguage;
   }
 }
 
@@ -173,6 +175,7 @@ const controls = {
   speed: document.getElementById("speed"),
   speedValue: document.getElementById("speed-value"),
   names: document.getElementById("names"),
+  language: document.getElementById("language"),
   sourceButtons: document.querySelectorAll(".source button"),
 };
 
@@ -656,7 +659,7 @@ function setSpeed(rate) {
     player.preservesPitch = true;
     player.playbackRate = rate;
   }
-  controls.speedValue.textContent = `×${rate.toLocaleString("fr-FR")}`;
+  controls.speedValue.textContent = `×${rate.toLocaleString(locale())}`;
   setSliderFill(controls.speed);
 }
 
@@ -682,7 +685,7 @@ function setSource(name) {
 function updatePlayButton() {
   const playing = !state.audio.paused;
   controls.play.dataset.playing = String(playing);
-  controls.play.setAttribute("aria-label", playing ? "Pause" : "Lecture");
+  controls.play.setAttribute("aria-label", playing ? t("pause") : t("play"));
 }
 
 function updateTimeline(time) {
@@ -717,6 +720,11 @@ function connectControls() {
   controls.speed.addEventListener("input", () => setSpeed(Number(controls.speed.value)));
 
   controls.names.value = state.convention;
+  controls.language.value = currentLanguage;
+  controls.language.addEventListener("change", () => {
+    setLanguage(controls.language.value);
+    refreshTexts();
+  });
   controls.names.addEventListener("change", () => {
     state.convention = controls.names.value;
     saveConvention(state.convention);
@@ -801,8 +809,7 @@ function setEditing(editing) {
 
 function updateEditBar() {
   const count = correctedNotes().length;
-  editUi.count.textContent = count === 0 ? "Aucune correction"
-    : count === 1 ? "1 note corrigée" : `${count} notes corrigées`;
+  editUi.count.textContent = t("corrections", { count });
   editUi.undo.disabled = state.history.length === 0;
 }
 
@@ -861,7 +868,7 @@ function afterCorrection() {
 /** Send the corrections a moment after the last click, not after every click. */
 function scheduleSave() {
   clearTimeout(state.saveTimer);
-  showEditStatus("Modifications non enregistrées…");
+  showEditStatus(t("unsaved"));
   const songId = state.currentId;
   const corrections = correctedNotes().map(({ pitch, start, hand }) => ({ pitch, start, hand }));
   state.saveTimer = setTimeout(() => saveCorrections(songId, corrections), SAVE_DELAY);
@@ -884,9 +891,9 @@ async function saveCorrections(songId, corrections) {
       body: JSON.stringify(corrections),
     });
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
-    if (songId === state.currentId) showEditStatus("Enregistré");
+    if (songId === state.currentId) showEditStatus(t("saved"));
   } catch (error) {
-    if (songId === state.currentId) showEditStatus("L'enregistrement a échoué. Réessayez.", true);
+    if (songId === state.currentId) showEditStatus(t("saveFailed"), true);
     console.error(error);
   }
 }
@@ -920,6 +927,14 @@ function connectCorrections() {
 // The song plays until the next chord of the practiced hand reaches the
 // keyboard, then waits. The microphone listens (listen.js); when every note
 // of the chord has been struck, the song goes on.
+
+// Version of the scripts, written in the page by the server: added to the
+// address of the scripts loaded later, so that a browser never runs an old copy.
+const ASSET_VERSION = document.querySelector('meta[name="asset-version"]')?.content ?? "";
+
+function versioned(path) {
+  return ASSET_VERSION ? `${path}?v=${ASSET_VERSION}` : path;
+}
 
 /** Load a script once, when it is first needed (TensorFlow.js weighs 1.4 MB). */
 function loadScript(src) {
@@ -963,13 +978,13 @@ function resetPracticePosition(time = state.audio.currentTime) {
 function setPracticeStatus(text, isError = false) {
   const { slow, analysisTime } = state.practice;
   // A slow computer answers late: say it in every message, not just once.
-  practiceUi.status.textContent = slow ? `${text} (écoute lente : ${Math.round(analysisTime)} ms)` : text;
+  practiceUi.status.textContent = slow ? t("slowListening", { text, ms: Math.round(analysisTime) }) : text;
   practiceUi.status.classList.toggle("is-error", isError);
 }
 
 function updateScore() {
   const { played, skipped } = state.practice.score;
-  practiceUi.score.textContent = `${played} joué${played > 1 ? "s" : ""} · ${skipped} passé${skipped > 1 ? "s" : ""}`;
+  practiceUi.score.textContent = t("score", { played, skipped });
 }
 
 function applyPracticeSound() {
@@ -999,10 +1014,11 @@ async function setPractice(on) {
   practice.score = { played: 0, skipped: 0 };
   updateScore();
   buildChords();
-  setPracticeStatus("Chargement du modèle d'écoute…");
+  setPracticeStatus(t("loadingModel"));
   try {
-    await loadScript("listen.js");
+    await loadScript(versioned("listen.js"));
     practice.listener ??= PianoListener.createListener({
+      workerUrl: versioned("listen-worker.js"),
       onNotes: handleHeardNotes,
       onLevel: (level) => practiceUi.level.style.setProperty("--level", level.toFixed(3)),
     });
@@ -1011,8 +1027,8 @@ async function setPractice(on) {
     console.error(error);
     const refused = error.name === "NotAllowedError";
     setPracticeStatus(refused
-      ? "Micro refusé. Autorisez-le avec l'icône à gauche de l'adresse, puis réessayez."
-      : `Impossible d'écouter le micro : ${error.message}`, true);
+      ? t("micRefused")
+      : t("micFailed", { message: error.message }), true);
     practice.on = false;
     practiceUi.toggle.setAttribute("aria-pressed", "false");
     applyPracticeSound();
@@ -1022,7 +1038,7 @@ async function setPractice(on) {
     practice.listener.stop();
     return;
   }
-  setPracticeStatus("Prêt. Lancez la lecture : le morceau s'arrête à chaque accord à jouer.");
+  setPracticeStatus(t("practiceReady"));
 }
 
 /**
@@ -1075,7 +1091,7 @@ function showExpected() {
     .filter((pitch) => !waiting.confirmed.has(pitch))
     .sort((a, b) => a - b)
     .map((pitch) => `${noteName(pitch, convention)}${octaveNumber(pitch, convention)}`);
-  setPracticeStatus(`À vous : ${missing.join(" ")}`);
+  setPracticeStatus(t("yourTurn", { notes: missing.join(" ") }));
 }
 
 /** The microphone heard something (called about ten times a second). */
@@ -1116,7 +1132,7 @@ function finishChord(played) {
   practice.lastDone = chord.start;
   practice.score[played ? "played" : "skipped"]++;
   updateScore();
-  setPracticeStatus(played ? "Bien joué." : "Accord passé.");
+  setPracticeStatus(played ? t("wellPlayed") : t("chordSkipped"));
 
   if (played) {
     const hitLine = state.height - state.keyboardHeight - FELT_HEIGHT - FALLBOARD_HEIGHT;
@@ -1199,11 +1215,11 @@ function connectPractice() {
 // ---------------------------------------------------------------------------
 
 const STATUS_LABELS = {
-  queued: "En attente",
-  downloading: "Téléchargement…",
-  processing: "Traitement en cours…",
-  ready: "Prêt",
-  error: "Échec du traitement",
+  queued: "statusQueued",
+  downloading: "statusDownloading",
+  processing: "statusProcessing",
+  ready: "statusReady",
+  error: "statusError",
 };
 
 function isBusy(status) {
@@ -1238,7 +1254,7 @@ function setLibraryOpen(open) {
 }
 
 function formatDate(isoDate) {
-  return new Date(isoDate).toLocaleDateString("fr-FR", { day: "numeric", month: "short" });
+  return new Date(isoDate).toLocaleDateString(locale(), { day: "numeric", month: "short" });
 }
 
 /** Build the list of songs. Titles go through textContent, never innerHTML. */
@@ -1260,8 +1276,8 @@ function renderSongList() {
     const status = document.createElement("span");
     status.className = "song-status";
     status.textContent = info.status === "ready"
-      ? `Ajouté le ${formatDate(info.created_at)}`
-      : STATUS_LABELS[info.status];
+      ? t("addedOn", { date: formatDate(info.created_at) })
+      : t(STATUS_LABELS[info.status]);
     if (info.status === "error") {
       status.classList.add("is-error");
       status.title = info.error ?? "";
@@ -1272,9 +1288,9 @@ function renderSongList() {
     remove.type = "button";
     remove.className = "text-button delete";
     const confirming = state.pendingDelete === info.id;
-    remove.textContent = confirming ? "Confirmer" : "Supprimer";
+    remove.textContent = confirming ? t("confirm") : t("delete");
     remove.classList.toggle("is-confirming", confirming);
-    remove.setAttribute("aria-label", `${confirming ? "Confirmer la suppression de" : "Supprimer"} ${info.title}`);
+    remove.setAttribute("aria-label", t(confirming ? "confirmDeleteLabel" : "deleteLabel", { title: info.title }));
     remove.hidden = isBusy(info.status);
     remove.addEventListener("click", () => deleteSong(info));
 
@@ -1284,7 +1300,7 @@ function renderSongList() {
   libraryUi.list.replaceChildren(...items);
 
   const count = state.songs.length;
-  libraryUi.toggle.textContent = count ? `Bibliothèque (${count})` : "Bibliothèque";
+  libraryUi.toggle.textContent = count ? t("libraryCount", { count }) : t("library");
 }
 
 /** Tell the user when a song they were waiting for is ready, or has failed. */
@@ -1293,9 +1309,9 @@ function reportFinishedSongs(previous) {
     const before = previous.get(info.id);
     if (!isBusy(before)) continue;
     if (info.status === "ready") {
-      showLibraryMessage(`« ${info.title} » est prêt. Cliquez sur son titre pour le jouer.`);
+      showLibraryMessage(t("songReady", { title: info.title }));
     } else if (info.status === "error") {
-      showLibraryMessage(`Le traitement de « ${info.title} » a échoué : ${info.error}`, true);
+      showLibraryMessage(t("songFailed", { title: info.title, error: info.error }), true);
     }
   }
 }
@@ -1309,7 +1325,7 @@ async function refreshLibrary() {
     state.songs = await response.json();
     reportFinishedSongs(previous);
   } catch (error) {
-    showLibraryMessage("Le serveur ne répond pas. Lancez « uv run piano-tiles-ai serve », puis rechargez la page.", true);
+    showLibraryMessage(t("serverDown"), true);
     console.error(error);
     return;
   }
@@ -1329,7 +1345,7 @@ async function refreshLibrary() {
     if (preferred) {
       await openSong(preferred);
     } else if (!busy) {
-      document.getElementById("details").textContent = "Aucun morceau pour l'instant";
+      document.getElementById("details").textContent = t("noSongYet");
       setLibraryOpen(true);
     }
   }
@@ -1357,14 +1373,19 @@ async function openSong(info) {
     state.history = [];
 
     document.getElementById("title").textContent = song.title;
-    document.getElementById("details").textContent =
-      `${song.notes.length} notes, ${formatTime(song.duration)}`;
+    showSongDetails();
     rememberSong(info.id);
     renderSongList();
   } catch (error) {
-    showLibraryMessage(`Impossible d'ouvrir « ${info.title} ».`, true);
+    showLibraryMessage(t("cannotOpen", { title: info.title }), true);
     console.error(error);
   }
+}
+
+function showSongDetails() {
+  document.getElementById("details").textContent = state.song
+    ? t("songDetails", { count: state.song.notes.length, duration: formatTime(state.song.duration) })
+    : t(state.songs.length ? "noSongSelected" : "noSongYet");
 }
 
 function closeSong() {
@@ -1378,12 +1399,12 @@ function closeSong() {
   state.song = null;
   state.currentId = null;
   document.getElementById("title").textContent = "Piano Tiles AI";
-  document.getElementById("details").textContent = "Aucun morceau sélectionné";
+  document.getElementById("details").textContent = t("noSongSelected");
 }
 
 async function uploadSong(file) {
   setLibraryOpen(true);
-  showLibraryMessage(`Envoi de « ${file.name} »…`);
+  showLibraryMessage(t("sending", { name: file.name }));
   const form = new FormData();
   form.append("file", file);
   await sendSong(fetch(API_SONGS, { method: "POST", body: form }));
@@ -1392,7 +1413,7 @@ async function uploadSong(file) {
 /** A link to a video: the server downloads its sound, then processes it. */
 async function addLink(url) {
   setLibraryOpen(true);
-  showLibraryMessage("Envoi du lien…");
+  showLibraryMessage(t("sendingLink"));
   await sendSong(fetch(`${API_SONGS}/from-url`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -1406,23 +1427,23 @@ async function sendSong(request) {
   try {
     response = await request;
   } catch (error) {
-    showLibraryMessage("Le serveur ne répond pas : rien n'a été envoyé.", true);
+    showLibraryMessage(t("nothingSent"), true);
     console.error(error);
     return false;
   }
   if (!response.ok) {
     const body = await response.json().catch(() => ({}));
-    const detail = response.status === 422 ? "Ce lien n'est pas valide (il doit commencer par https://)." : body.detail;
-    showLibraryMessage(detail ?? `L'envoi a échoué (erreur ${response.status}).`, true);
+    const detail = response.status === 422 ? t("invalidLink") : body.detail;
+    showLibraryMessage(detail ?? t("sendFailed", { status: response.status }), true);
     return false;
   }
 
   const info = await response.json();
   showLibraryMessage(info.status === "ready"
-    ? `« ${info.title} » était déjà dans la bibliothèque.`
+    ? t("alreadyThere", { title: info.title })
     : info.source_url
-      ? "Lien reçu : le son va être téléchargé puis traité. Comptez deux à trois minutes."
-      : `« ${info.title} » est en cours de traitement. Comptez une à deux minutes.`);
+      ? t("linkReceived")
+      : t("processingSong", { title: info.title }));
   await refreshLibrary();
   return true;
 }
@@ -1455,9 +1476,9 @@ async function deleteSong(info) {
   const response = await fetch(`${API_SONGS}/${info.id}`, { method: "DELETE" });
   if (!response.ok) {
     const body = await response.json().catch(() => ({}));
-    showLibraryMessage(body.detail ?? "La suppression a échoué.", true);
+    showLibraryMessage(body.detail ?? t("deleteFailed"), true);
   } else {
-    showLibraryMessage(`« ${info.title} » a été supprimé.`);
+    showLibraryMessage(t("deleted", { title: info.title }));
   }
   await refreshLibrary();
 }
@@ -1526,7 +1547,22 @@ function connectLibrary() {
 // Main
 // ---------------------------------------------------------------------------
 
+/** After a change of language: rewrite the texts that JavaScript wrote. */
+function refreshTexts() {
+  renderSongList();
+  updatePlayButton();
+  setSpeed(Number(controls.speed.value));
+  if (state.song || state.currentId === null) showSongDetails();
+  if (state.editing) updateEditBar();
+  if (state.practice.on) {
+    updateScore();
+    if (state.practice.waiting) showExpected();
+  }
+}
+
 function main() {
+  applyTranslations();
+  updatePlayButton();
   resizeCanvas();
   window.addEventListener("resize", resizeCanvas);
   connectControls();
