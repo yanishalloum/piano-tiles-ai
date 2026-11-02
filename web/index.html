@@ -22,6 +22,9 @@
           <span class="swatch swatch-left" aria-hidden="true"></span>Main gauche
           <span class="swatch swatch-right" aria-hidden="true"></span>Main droite
         </p>
+        <button id="practice-toggle" class="library-toggle" type="button" aria-pressed="false">
+          S'entraîner
+        </button>
         <button id="edit-toggle" class="library-toggle" type="button" aria-pressed="false">
           Corriger les mains
         </button>
@@ -42,6 +45,26 @@
         <span id="edit-count" class="edit-count"></span>
         <button id="undo" class="text-button" type="button" title="Ctrl + Z">Annuler</button>
         <span id="edit-status" class="edit-status" role="status"></span>
+      </div>
+
+      <div id="practice-bar" class="edit-bar practice-bar" hidden>
+        <label class="practice-field">
+          Main
+          <select id="practice-hand">
+            <option value="both">Les deux</option>
+            <option value="left">Gauche</option>
+            <option value="right">Droite</option>
+          </select>
+        </label>
+        <span class="mic" title="Niveau du micro">
+          Micro <span id="mic-level" class="mic-level" aria-hidden="true"></span>
+        </span>
+        <label class="practice-field" title="Avec un casque seulement : sinon le micro entend le morceau">
+          <input id="practice-sound" type="checkbox"> Son du morceau
+        </label>
+        <span id="practice-status" class="practice-status" role="status"></span>
+        <span id="practice-score" class="edit-count"></span>
+        <button id="practice-skip" class="text-button" type="button" title="Entrée">Passer</button>
       </div>
 
       <aside id="library" class="library" aria-label="Bibliothèque" hidden>

@@ -196,6 +196,47 @@ kbd {
   color: #e88b7a;
 }
 
+/* --- Practice mode ------------------------------------------------------ */
+
+.practice-bar {
+  align-items: center;
+}
+
+.practice-field {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--muted);
+}
+
+.practice-field input[type="checkbox"] {
+  accent-color: var(--brass);
+}
+
+.mic {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--muted);
+}
+
+.mic-level {
+  --level: 0;
+  width: 54px;
+  height: 4px;
+  border-radius: 2px;
+  background: linear-gradient(to right, #7fc8a9 calc(var(--level) * 100%), var(--line) calc(var(--level) * 100%));
+}
+
+.practice-status {
+  min-width: 16ch;
+  color: var(--ivory);
+}
+
+.practice-status.is-error {
+  color: #e88b7a;
+}
+
 /* --- Transport ----------------------------------------------------------- */
 
 .transport {

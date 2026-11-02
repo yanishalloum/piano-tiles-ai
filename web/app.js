@@ -43,11 +43,22 @@ const COLORS = {
     right: { light: "#f0cf86", base: "#d0a24f", dark: "#7d5a1c" },
     unknown: { light: "#c5c9d3", base: "#9aa0ae", dark: "#555b68" },
   },
+  heard: "#7fc8a9",   // verdigris, the green of aged brass: what the microphone hears
+  wrong: "#e88b7a",
 };
 
 const SAVE_DELAY = 600;     // ms of calm before corrections are sent to the server
 const CHORD_WINDOW = 0.03;  // s: notes starting this close together form a chord
 const SCRUB_SPEED = 0.004;  // s of music per pixel of mouse wheel, in edit mode
+
+// Practice mode: the song waits until you play the right notes.
+const PRACTICE_LEAD = 0.05;    // s: stop this much before a chord, so the recording never plays it
+const ONSET_THRESHOLD = 0.5;   // Basic Pitch probability above which a note counts as struck
+const EARLY_WINDOW = 400;      // ms: notes struck this long before the wait still count
+const GRACE = 300;             // ms the song keeps going while the microphone answers
+const REFRACTORY = 150;        // ms: a second onset of the same key this soon is the same strike
+const WRONG_FLASH = 450;       // ms a wrong key stays marked
+const SLOW_ANALYSIS = 300;     // ms: above this, the microphone answers too late
 
 const REDUCED_MOTION = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
@@ -172,6 +183,17 @@ const libraryUi = {
   overlay: document.getElementById("drop-overlay"),
 };
 
+const practiceUi = {
+  toggle: document.getElementById("practice-toggle"),
+  bar: document.getElementById("practice-bar"),
+  hand: document.getElementById("practice-hand"),
+  sound: document.getElementById("practice-sound"),
+  skip: document.getElementById("practice-skip"),
+  level: document.getElementById("mic-level"),
+  status: document.getElementById("practice-status"),
+  score: document.getElementById("practice-score"),
+};
+
 const editUi = {
   toggle: document.getElementById("edit-toggle"),
   bar: document.getElementById("edit-bar"),
@@ -203,6 +225,19 @@ const state = {
   hovered: null,      // note under the mouse in edit mode
   history: [],        // past corrections, for undo: each entry is a list of {note, hand}
   saveTimer: null,
+  practice: {
+    on: false,
+    listener: null,
+    hand: "both",       // which hand the player practices: "both", "left" or "right"
+    chords: [],         // the chords to play, in order: {start, pitches: Set}
+    lastDone: -Infinity, // chords up to this time were played, skipped, or are behind us
+    waiting: null,      // {chord, confirmed: Set} while the song waits for the player
+    recent: [],         // notes struck in the last moments: {pitch, time}
+    sounding: new Set(), // notes the microphone hears right now
+    wrong: new Map(),   // pitch -> time it was struck by mistake
+    lastOnset: new Map(), // pitch -> time of its last onset, to count each strike once
+    score: { played: 0, skipped: 0 },
+  },
 };
 
 function resizeCanvas() {
@@ -561,7 +596,9 @@ function drawFrame(now) {
 
   drawFallboard(tiles, hitLine);
   drawKeyboard(keyboardTop, state.keyboardHeight, activeKeys);
+  drawPracticeMarks(keyboardTop, state.keyboardHeight, hitLine);
   updateAndDrawSparks(dt);
+  updatePractice(time);
 
   updateTimeline(time);
   requestAnimationFrame(drawFrame);
@@ -583,6 +620,7 @@ function songDuration() {
 
 function togglePlayback() {
   if (!state.song) return;
+  if (state.practice.waiting?.stopped) return; // the song is waiting for the player's notes
   if (state.audio.paused) {
     state.audio.play().catch((error) => console.error(error));
   } else {
@@ -591,7 +629,9 @@ function togglePlayback() {
 }
 
 function seekTo(seconds) {
-  state.audio.currentTime = Math.min(Math.max(seconds, 0), songDuration());
+  const target = Math.min(Math.max(seconds, 0), songDuration());
+  resetPracticePosition(target);
+  state.audio.currentTime = target;
 }
 
 function skip(seconds) {
@@ -693,7 +733,10 @@ function connectControls() {
     // Buttons, sliders and lists already react to the keyboard on their own.
     if (event.target.closest("button, input, select")) return;
 
-    if (state.editing && (event.ctrlKey || event.metaKey) && event.code === "KeyZ") {
+    if (state.practice.on && (event.code === "Enter" || event.code === "NumpadEnter")) {
+      event.preventDefault();
+      skipChord();
+    } else if (state.editing && (event.ctrlKey || event.metaKey) && event.code === "KeyZ") {
       event.preventDefault();
       undoCorrection();
     } else if (event.code === "Space") {
@@ -744,6 +787,7 @@ function setEditing(editing) {
   editUi.toggle.setAttribute("aria-pressed", String(state.editing));
   editUi.bar.hidden = !state.editing;
   if (state.editing) {
+    setPractice(false);
     state.audio.pause(); // a still image is easier to click
     updateEditBar();
   }
@@ -861,6 +905,287 @@ function connectCorrections() {
 
   // Last chance to save when the page is closed.
   window.addEventListener("pagehide", flushCorrections);
+}
+
+// ---------------------------------------------------------------------------
+// Practice mode
+// ---------------------------------------------------------------------------
+//
+// The song plays until the next chord of the practiced hand reaches the
+// keyboard, then waits. The microphone listens (listen.js); when every note
+// of the chord has been struck, the song goes on.
+
+/** Load a script once, when it is first needed (TensorFlow.js weighs 1.4 MB). */
+function loadScript(src) {
+  loadScript.cache ??= new Map();
+  if (!loadScript.cache.has(src)) {
+    loadScript.cache.set(src, new Promise((resolve, reject) => {
+      const script = document.createElement("script");
+      script.src = src;
+      script.onload = resolve;
+      script.onerror = () => reject(new Error(`Impossible de charger ${src}`));
+      document.head.append(script);
+    }));
+  }
+  return loadScript.cache.get(src);
+}
+
+/** Chords of the practiced hand: notes struck together (within CHORD_WINDOW). */
+function buildChords() {
+  const practice = state.practice;
+  const notes = state.song.notes.filter((note) => practice.hand === "both" || note.hand === practice.hand);
+  const chords = [];
+  for (const note of notes) { // notes are sorted by start time
+    const last = chords[chords.length - 1];
+    if (last && note.start - last.start <= CHORD_WINDOW) {
+      last.pitches.add(note.pitch);
+    } else {
+      chords.push({ start: note.start, pitches: new Set([note.pitch]) });
+    }
+  }
+  practice.chords = chords;
+  practice.pendingRebuild = false;
+  resetPracticePosition();
+}
+
+/** After a jump in the song: forget the wait, start again from the new position. */
+function resetPracticePosition(time = state.audio.currentTime) {
+  state.practice.lastDone = time - 0.01; // chords before this point are not asked for
+  state.practice.waiting = null;
+}
+
+function setPracticeStatus(text, isError = false) {
+  const { slow, analysisTime } = state.practice;
+  // A slow computer answers late: say it in every message, not just once.
+  practiceUi.status.textContent = slow ? `${text} (écoute lente : ${Math.round(analysisTime)} ms)` : text;
+  practiceUi.status.classList.toggle("is-error", isError);
+}
+
+function updateScore() {
+  const { played, skipped } = state.practice.score;
+  practiceUi.score.textContent = `${played} joué${played > 1 ? "s" : ""} · ${skipped} passé${skipped > 1 ? "s" : ""}`;
+}
+
+function applyPracticeSound() {
+  const mute = state.practice.on && !practiceUi.sound.checked;
+  for (const player of Object.values(players)) player.muted = mute;
+}
+
+async function setPractice(on) {
+  const practice = state.practice;
+  if (on === practice.on) return;
+  if (on && !state.song) return;
+  practice.on = on;
+  practiceUi.toggle.setAttribute("aria-pressed", String(on));
+  practiceUi.bar.hidden = !on;
+  applyPracticeSound();
+
+  if (!on) {
+    practice.listener?.stop();
+    practice.waiting = null;
+    practice.sounding = new Set();
+    practiceUi.level.style.setProperty("--level", "0");
+    return;
+  }
+
+  setEditing(false);
+  state.audio.pause();
+  practice.score = { played: 0, skipped: 0 };
+  updateScore();
+  buildChords();
+  setPracticeStatus("Chargement du modèle d'écoute…");
+  try {
+    await loadScript("listen.js");
+    practice.listener ??= PianoListener.createListener({
+      onNotes: handleHeardNotes,
+      onLevel: (level) => practiceUi.level.style.setProperty("--level", level.toFixed(3)),
+    });
+    await practice.listener.start();
+  } catch (error) {
+    console.error(error);
+    const refused = error.name === "NotAllowedError";
+    setPracticeStatus(refused
+      ? "Micro refusé. Autorisez-le avec l'icône à gauche de l'adresse, puis réessayez."
+      : `Impossible d'écouter le micro : ${error.message}`, true);
+    practice.on = false;
+    practiceUi.toggle.setAttribute("aria-pressed", "false");
+    applyPracticeSound();
+    return;
+  }
+  if (!practice.on) { // left while the model was loading
+    practice.listener.stop();
+    return;
+  }
+  setPracticeStatus("Prêt. Lancez la lecture : le morceau s'arrête à chaque accord à jouer.");
+}
+
+/**
+ * Called every frame. When the next chord reaches the keyboard, the song
+ * starts waiting for it, but keeps going for GRACE ms: the microphone needs a
+ * moment to answer, and a player who is on time should never be stopped.
+ * If the chord is still not heard after that, the song stops on it.
+ */
+function updatePractice(time) {
+  const practice = state.practice;
+  if (!practice.on || !state.song) return;
+  if (practice.pendingRebuild) buildChords();
+
+  const { waiting } = practice;
+  if (waiting) {
+    if (!waiting.stopped && performance.now() > waiting.deadline) {
+      waiting.stopped = true;
+      state.audio.pause();
+      state.audio.currentTime = waiting.chord.start - PRACTICE_LEAD; // back onto the chord
+      state.lastTime = state.audio.currentTime;
+      showExpected();
+    }
+    return;
+  }
+  if (state.audio.paused) return;
+
+  // The first chord not played yet. Never skipped, even when the song went
+  // past it during the grace period of the previous chord.
+  const next = practice.chords.find((chord) => chord.start > practice.lastDone);
+  if (!next || next.start - PRACTICE_LEAD > time) return;
+
+  const now = performance.now();
+  practice.waiting = { chord: next, confirmed: new Set(), deadline: now + GRACE, stopped: false };
+
+  // Notes struck a moment early (playing along) count too, once each.
+  for (const onset of practice.recent) {
+    if (!onset.used && now - onset.time <= EARLY_WINDOW && next.pitches.has(onset.pitch)) {
+      onset.used = true;
+      practice.waiting.confirmed.add(onset.pitch);
+    }
+  }
+  if (practice.waiting.confirmed.size === next.pitches.size) finishChord(true);
+}
+
+function showExpected() {
+  const { waiting } = state.practice;
+  if (!waiting) return;
+  const convention = state.convention === "none" ? "english" : state.convention;
+  const missing = [...waiting.chord.pitches]
+    .filter((pitch) => !waiting.confirmed.has(pitch))
+    .sort((a, b) => a - b)
+    .map((pitch) => `${noteName(pitch, convention)}${octaveNumber(pitch, convention)}`);
+  setPracticeStatus(`À vous : ${missing.join(" ")}`);
+}
+
+/** The microphone heard something (called about ten times a second). */
+function handleHeardNotes(struck, sounding, now, duration) {
+  const practice = state.practice;
+  practice.sounding = sounding;
+  practice.analysisTime = 0.8 * (practice.analysisTime ?? duration) + 0.2 * duration;
+  practice.slow = practice.analysisTime > SLOW_ANALYSIS;
+  practice.recent = practice.recent.filter(({ time }) => now - time <= EARLY_WINDOW);
+  for (const [pitch, probability] of struck) {
+    if (probability < ONSET_THRESHOLD) continue;
+    // Two analyses in a row can see the same strike: count it once.
+    if (now - (practice.lastOnset.get(pitch) ?? -Infinity) < REFRACTORY) continue;
+    practice.lastOnset.set(pitch, now);
+
+    const onset = { pitch, time: now, used: false };
+    practice.recent.push(onset);
+    const { waiting } = practice;
+    if (!waiting) continue;
+    if (waiting.chord.pitches.has(pitch)) {
+      onset.used = true; // this strike cannot also validate the next chord
+      waiting.confirmed.add(pitch);
+    } else if (waiting.stopped) {
+      practice.wrong.set(pitch, now);
+    }
+  }
+  if (practice.waiting) {
+    if (practice.waiting.confirmed.size === practice.waiting.chord.pitches.size) finishChord(true);
+    else if (practice.waiting.stopped) showExpected();
+  }
+}
+
+/** The chord was played (or skipped): the song goes on. */
+function finishChord(played) {
+  const practice = state.practice;
+  const { chord, stopped } = practice.waiting;
+  practice.waiting = null;
+  practice.lastDone = chord.start;
+  practice.score[played ? "played" : "skipped"]++;
+  updateScore();
+  setPracticeStatus(played ? "Bien joué." : "Accord passé.");
+
+  if (played) {
+    const hitLine = state.height - state.keyboardHeight - FELT_HEIGHT - FALLBOARD_HEIGHT;
+    for (const pitch of chord.pitches) {
+      const key = state.layout.get(pitch);
+      if (key) spawnSparks(key.x + key.width / 2, hitLine, COLORS.heard);
+    }
+  }
+  if (stopped) state.audio.play().catch((error) => console.error(error));
+}
+
+function skipChord() {
+  if (state.practice.waiting) finishChord(false);
+}
+
+/** Marks on the keyboard: keys to play, keys already played, keys heard. */
+function drawPracticeMarks(top, height, hitLine) {
+  const practice = state.practice;
+  if (!practice.on) return;
+  const now = performance.now();
+  const pulse = REDUCED_MOTION ? 1 : 0.65 + 0.35 * Math.sin(now / 160);
+
+  // Black keys: their whole body. White keys: the part below the black keys,
+  // so that the frame never covers a neighbouring black key.
+  const markKey = (pitch, color, alpha, filled) => {
+    const key = state.layout.get(pitch);
+    if (!key) return;
+    const y = key.black ? top : top + height * 0.6 + 2;
+    const keyHeight = key.black ? height * 0.6 : height * 0.4 - KEY_FRONT - 2;
+    ctx.globalAlpha = alpha;
+    ctx.strokeStyle = color;
+    ctx.fillStyle = color;
+    ctx.lineWidth = 2.5;
+    ctx.beginPath();
+    ctx.roundRect(key.x + 1.5, y + 1.5, key.width - 3, keyHeight - 3, 3);
+    if (filled) ctx.fill();
+    ctx.stroke();
+    ctx.globalAlpha = 1;
+  };
+
+  if (practice.waiting) {
+    for (const pitch of practice.waiting.chord.pitches) {
+      if (practice.waiting.confirmed.has(pitch)) {
+        markKey(pitch, COLORS.heard, 0.55, true);
+      } else {
+        const note = state.song.notes.find((n) => n.pitch === pitch && Math.abs(n.start - practice.waiting.chord.start) <= CHORD_WINDOW);
+        markKey(pitch, handPalette(note?.hand).light, pulse, false);
+      }
+    }
+  }
+  for (const [pitch, struckAt] of practice.wrong) {
+    const age = now - struckAt;
+    if (age > WRONG_FLASH) practice.wrong.delete(pitch);
+    else markKey(pitch, COLORS.wrong, 1 - age / WRONG_FLASH, false);
+  }
+
+  // A small verdigris dot under every key the microphone hears.
+  ctx.fillStyle = COLORS.heard;
+  for (const pitch of practice.sounding) {
+    const key = state.layout.get(pitch);
+    if (!key) continue;
+    ctx.beginPath();
+    ctx.arc(key.x + key.width / 2, hitLine + FALLBOARD_HEIGHT / 2, Math.min(4, key.width / 3), 0, 2 * Math.PI);
+    ctx.fill();
+  }
+}
+
+function connectPractice() {
+  practiceUi.toggle.addEventListener("click", () => setPractice(!state.practice.on));
+  practiceUi.skip.addEventListener("click", skipChord);
+  practiceUi.sound.addEventListener("change", applyPracticeSound);
+  practiceUi.hand.addEventListener("change", () => {
+    state.practice.hand = practiceUi.hand.value;
+    if (state.practice.on) buildChords();
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -1022,6 +1347,7 @@ async function openSong(info) {
 
     setEditing(false);
     await applySavedCorrections(info.id, song.notes);
+    if (state.practice.on) state.practice.pendingRebuild = true;
     state.history = [];
 
     document.getElementById("title").textContent = song.title;
@@ -1037,6 +1363,7 @@ async function openSong(info) {
 
 function closeSong() {
   setEditing(false);
+  setPractice(false);
   for (const player of Object.values(players)) {
     player.pause();
     player.removeAttribute("src");
@@ -1199,6 +1526,7 @@ function main() {
   connectControls();
   connectLibrary();
   connectCorrections();
+  connectPractice();
   setSpeed(1);
   requestAnimationFrame(drawFrame);
   refreshLibrary();
