@@ -20,6 +20,8 @@ the result as falling tiles you can watch, correct and practice with your own pi
   <sub>J. S. Bach, Prelude in C major BWV 846 (public domain). Blue: left hand. Gold: right hand.</sub>
 </p>
 
+<p align="center"><a href="https://yanishalloum.github.io/piano-tiles-ai/"><b>▶ Try the online demo</b></a> — no install, practice mode included (Chrome or Edge, with a microphone)</p>
+
 ## Features
 
 - **Any song in**: audio files (MP3, WAV, FLAC, OGG, M4A), videos (MP4, MOV, WebM, MKV), or a link,
