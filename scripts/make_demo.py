@@ -66,7 +66,9 @@ def bach_notes() -> list[dict]:
             for i, p in enumerate(upper + upper):
                 onset = start + (2 + i) * SIXTEENTH
                 velocity = 70 if i % 3 == 0 else 60
-                notes.append(dict(pitch=p, start=onset, end=onset + 1.6 * SIXTEENTH, velocity=velocity, hand="right"))
+                notes.append(
+                    dict(pitch=p, start=onset, end=onset + 1.6 * SIXTEENTH, velocity=velocity, hand="right")
+                )
         time += 16 * SIXTEENTH
     for note in notes:
         note["start"], note["end"] = round(note["start"], 3), round(note["end"], 3)
@@ -75,7 +77,20 @@ def bach_notes() -> list[dict]:
 
 def decode(path: Path) -> np.ndarray:
     raw = subprocess.run(
-        ["ffmpeg", "-loglevel", "error", "-i", str(path), "-ac", "1", "-ar", str(SAMPLE_RATE), "-f", "f32le", "-"],
+        [
+            "ffmpeg",
+            "-loglevel",
+            "error",
+            "-i",
+            str(path),
+            "-ac",
+            "1",
+            "-ar",
+            str(SAMPLE_RATE),
+            "-f",
+            "f32le",
+            "-",
+        ],
         capture_output=True,
         check=True,
     ).stdout
@@ -132,8 +147,23 @@ def main() -> None:
 
     audio = render(notes, duration, load_samples())
     subprocess.run(
-        ["ffmpeg", "-y", "-loglevel", "error", "-f", "f32le", "-ar", str(SAMPLE_RATE), "-ac", "1",
-         "-i", "-", "-b:a", "128k", str(folder / "mix.mp3")],
+        [
+            "ffmpeg",
+            "-y",
+            "-loglevel",
+            "error",
+            "-f",
+            "f32le",
+            "-ar",
+            str(SAMPLE_RATE),
+            "-ac",
+            "1",
+            "-i",
+            "-",
+            "-b:a",
+            "128k",
+            str(folder / "mix.mp3"),
+        ],
         input=audio.tobytes(),
         check=True,
     )
