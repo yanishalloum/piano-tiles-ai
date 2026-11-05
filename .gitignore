@@ -38,3 +38,6 @@ web/songs/
 
 # Song library of the web app (copyrighted audio)
 library/
+
+# Online demo: public-domain music, Salamander samples (CC BY 3.0)
+!web/demo/*/mix.mp3

@@ -5,6 +5,8 @@
 // ---------------------------------------------------------------------------
 
 const API_SONGS = "/api/songs";
+const DEMO_DIR = "demo";
+const DEMO_SONGS = `${DEMO_DIR}/songs.json`;
 const POLL_INTERVAL = 2000; // ms between two status checks while a song is processing
 
 const LOWEST_KEY = 21;   // A0
@@ -227,7 +229,8 @@ const state = {
   currentId: null,    // id of the song being played
   pollTimer: null,
   pendingDelete: null,
-  pendingSave: null,  // function that saves corrections not yet sent
+  pendingSave: null,
+  demo: false,        // true in the online demo, without a server  // function that saves corrections not yet sent
   dragDepth: 0,
   tiles: [],          // tiles drawn in the last frame, to find the one under the mouse
   editing: false,     // hand-correction mode
@@ -778,8 +781,12 @@ async function applySavedCorrections(songId, notes) {
   for (const note of notes) note.modelHand = note.hand; // keep the model's answer
   let corrections = [];
   try {
-    const response = await fetch(`${API_SONGS}/${songId}/corrections`);
-    if (response.ok) corrections = await response.json();
+    if (state.demo) {
+      corrections = JSON.parse(localStorage.getItem(`corrections:${songId}`) ?? "[]");
+    } else {
+      const response = await fetch(`${API_SONGS}/${songId}/corrections`);
+      if (response.ok) corrections = await response.json();
+    }
   } catch (error) {
     console.error(error); // without corrections, the song still plays
   }
@@ -884,6 +891,17 @@ function flushCorrections() {
 
 async function saveCorrections(songId, corrections) {
   state.pendingSave = null;
+  if (state.demo) {
+    // No server in the online demo: corrections stay in this browser.
+    try {
+      localStorage.setItem(`corrections:${songId}`, JSON.stringify(corrections));
+      if (songId === state.currentId) showEditStatus(t("savedInBrowser"));
+    } catch (error) {
+      if (songId === state.currentId) showEditStatus(t("saveFailed"), true);
+      console.error(error);
+    }
+    return;
+  }
   try {
     const response = await fetch(`${API_SONGS}/${songId}/corrections`, {
       method: "PUT",
@@ -1319,7 +1337,12 @@ function reportFinishedSongs(previous) {
 async function refreshLibrary() {
   clearTimeout(state.pollTimer);
   try {
-    const response = await fetch(API_SONGS);
+    const response = await fetch(state.demo ? DEMO_SONGS : API_SONGS);
+    if (response.status === 404 && !state.demo) {
+      // The page is served without our server (GitHub Pages): play the demo songs.
+      await startDemo();
+      return;
+    }
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const previous = new Map(state.songs.map((info) => [info.id, info.status]));
     state.songs = await response.json();
@@ -1352,7 +1375,8 @@ async function refreshLibrary() {
 }
 
 async function openSong(info) {
-  const base = `${API_SONGS}/${info.id}/files`;
+  // Demo songs are plain files next to the page; library songs come from the server.
+  const base = state.demo ? `${DEMO_DIR}/${info.id}` : `${API_SONGS}/${info.id}/files`;
   try {
     const response = await fetch(`${base}/song.json`);
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
@@ -1365,7 +1389,8 @@ async function openSong(info) {
     state.lastTime = 0;
     state.sparks = [];
     players.mix.src = `${base}/mix.mp3`;
-    players.piano.src = `${base}/piano.mp3`;
+    // Demo songs are piano recordings already: one file serves both sources.
+    players.piano.src = state.demo ? `${base}/mix.mp3` : `${base}/piano.mp3`;
 
     setEditing(false);
     await applySavedCorrections(info.id, song.notes);
@@ -1380,6 +1405,18 @@ async function openSong(info) {
     showLibraryMessage(t("cannotOpen", { title: info.title }), true);
     console.error(error);
   }
+}
+
+/**
+ * Online demo (GitHub Pages): there is no server to store or process songs,
+ * so the page plays the songs listed in demo/songs.json. Adding and deleting
+ * songs is hidden; hand corrections stay in the browser (localStorage).
+ */
+async function startDemo() {
+  state.demo = true;
+  document.body.classList.add("is-demo");
+  document.getElementById("demo-notice").hidden = false;
+  await refreshLibrary();
 }
 
 function showSongDetails() {
@@ -1496,6 +1533,7 @@ function connectLibrary() {
 
   // Ctrl + V of a link anywhere on the page (except in a text field).
   window.addEventListener("paste", (event) => {
+    if (state.demo) return; // nothing can be added without the server
     if (event.target.closest("input, textarea")) return;
     const text = event.clipboardData?.getData("text") ?? "";
     if (isLink(text)) addLink(text.trim());
@@ -1515,6 +1553,7 @@ function connectLibrary() {
     return types.includes("Files") || types.includes("text/uri-list");
   };
   window.addEventListener("dragenter", (event) => {
+    if (state.demo) return;
     if (!carriesFiles(event)) return;
     event.preventDefault();
     state.dragDepth++;
@@ -1533,6 +1572,7 @@ function connectLibrary() {
     event.preventDefault(); // otherwise the browser opens the file itself
     state.dragDepth = 0;
     libraryUi.overlay.hidden = true;
+    if (state.demo) return;
     const [file] = event.dataTransfer.files;
     const link = event.dataTransfer.getData("text/uri-list").split("\n")[0].trim();
     if (file) {

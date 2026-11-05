@@ -43,6 +43,8 @@ const TEXTS = {
     corrections: ({ count }) => (count === 0 ? "No correction" : count === 1 ? "1 note corrected" : `${count} notes corrected`),
     unsaved: "Unsaved changes…",
     saved: "Saved",
+    savedInBrowser: "Saved in this browser",
+    demoNotice: 'Online demo. <a href="https://github.com/yanishalloum/piano-tiles-ai#getting-started">Install it</a> to add your own songs.',
     saveFailed: "Saving failed. Try again.",
 
     // Practice
@@ -130,6 +132,8 @@ const TEXTS = {
     corrections: ({ count }) => (count === 0 ? "Aucune correction" : count === 1 ? "1 note corrigée" : `${count} notes corrigées`),
     unsaved: "Modifications non enregistrées…",
     saved: "Enregistré",
+    savedInBrowser: "Enregistré dans ce navigateur",
+    demoNotice: 'Démo en ligne. <a href="https://github.com/yanishalloum/piano-tiles-ai#getting-started">Installez-le</a> pour ajouter vos morceaux.',
     saveFailed: "L'enregistrement a échoué. Réessayez.",
 
     hand: "Main",
